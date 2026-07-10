@@ -221,15 +221,30 @@
     try {
       const text = await file.text();
       const parsed = JSON.parse(text);
-      if (!Array.isArray(parsed)) throw new Error("Expected a JSON array of rules");
-      const valid = parsed.filter(isValidRule);
-      if (valid.length === 0) throw new Error("No valid rules found in file");
-      for (const r of valid) upsertRule(r.from, r.to);
-      flashStatus(`Imported ${valid.length} word${valid.length === 1 ? "" : "s"}`);
+      const entries = parseImportedEntries(parsed);
+      if (entries.length === 0) throw new Error("No valid rules found in file");
+      for (const r of entries) upsertRule(r.from, r.to);
+      flashStatus(`Imported ${entries.length} word${entries.length === 1 ? "" : "s"}`);
     } catch (err) {
       alert(`Could not import file: ${err.message}`);
     }
   });
+
+  /**
+   * Accepts either the export format (an array of {from, to} objects) or a
+   * plain dictionary object, e.g. {"hello": "myooooms"}.
+   */
+  function parseImportedEntries(parsed) {
+    if (Array.isArray(parsed)) {
+      return parsed.filter(isValidRule);
+    }
+    if (parsed && typeof parsed === "object") {
+      return Object.entries(parsed)
+        .filter(([from, to]) => typeof from === "string" && from.trim() !== "" && typeof to === "string")
+        .map(([from, to]) => ({ from, to }));
+    }
+    throw new Error("Expected a JSON array of rules or a {word: replacement} object");
+  }
 
   clearBtn.addEventListener("click", () => {
     if (rules.length === 0) return;
