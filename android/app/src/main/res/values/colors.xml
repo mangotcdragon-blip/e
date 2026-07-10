@@ -1,0 +1,14 @@
+<resources>
+    <color name="purple_500">#4F46E5</color>
+    <color name="purple_700">#4338CA</color>
+    <color name="background">#F5F6F8</color>
+    <color name="surface">#FFFFFF</color>
+    <color name="text_primary">#1C1E21</color>
+    <color name="text_muted">#6B7280</color>
+
+    <color name="key_background">#FFFFFF</color>
+    <color name="key_background_special">#D1D5DB</color>
+    <color name="key_background_pressed">#E5E7EB</color>
+    <color name="key_text">#1C1E21</color>
+    <color name="keyboard_background">#ECEDF0</color>
+</resources>

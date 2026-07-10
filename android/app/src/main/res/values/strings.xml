@@ -1,0 +1,17 @@
+<resources>
+    <string name="app_name">Custom Autocorrect</string>
+    <string name="keyboard_name">Custom Autocorrect Keyboard</string>
+    <string name="keyboard_settings_desc">A keyboard that autocorrects your own custom words</string>
+
+    <string name="title_words">Custom Words</string>
+    <string name="hint_from">Word (e.g. hello)</string>
+    <string name="hint_to">Replacement (e.g. myooooms)</string>
+    <string name="action_add">Add</string>
+    <string name="action_export">Export JSON</string>
+    <string name="action_import">Import JSON</string>
+    <string name="action_clear">Clear All</string>
+    <string name="action_enable_keyboard">Enable Keyboard</string>
+    <string name="action_switch_keyboard">Switch Keyboard</string>
+    <string name="empty_hint">No custom words yet. Add one above, or import a JSON file.</string>
+    <string name="setup_instructions">1. Tap "Enable Keyboard" and turn on Custom Autocorrect Keyboard.\n2. In any text field, tap "Switch Keyboard" (or use the keyboard picker) and choose Custom Autocorrect Keyboard.\n3. Words below are corrected after Space/Enter, or after ~3s of no typing.</string>
+</resources>
