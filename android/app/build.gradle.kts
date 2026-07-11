@@ -52,6 +52,12 @@ android {
     buildFeatures {
         viewBinding = true
     }
+
+    lint {
+        // Keyboard-service-inflated layouts intentionally use plain framework ImageButton
+        // (not AppCompatImageButton), where android:tint is the correct, valid attribute.
+        disable += "UseAppTint"
+    }
 }
 
 dependencies {

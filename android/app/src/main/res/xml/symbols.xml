@@ -40,16 +40,17 @@
         <Key android:codes="63" android:keyLabel="?" />
         <Key android:codes="44" android:keyLabel="," />
         <Key android:codes="46" android:keyLabel="." />
-        <Key android:codes="-5" android:keyLabel="&#9003;" android:keyWidth="20%p"
+        <Key android:codes="-5" android:keyLabel="" android:keyWidth="20%p"
              android:isRepeatable="true" />
     </Row>
 
     <Row android:rowEdgeFlags="bottom">
         <Key android:codes="-2" android:keyLabel="ABC" android:keyWidth="15%p" />
-        <Key android:codes="47" android:keyLabel="/" android:keyWidth="10%p" />
-        <Key android:codes="32" android:keyLabel="space" android:keyWidth="45%p"
+        <Key android:codes="-10" android:keyLabel="" android:keyWidth="12%p" />
+        <Key android:codes="47" android:keyLabel="/" android:keyWidth="8%p" />
+        <Key android:codes="32" android:keyLabel="" android:keyWidth="35%p"
              android:isRepeatable="false" />
-        <Key android:codes="95" android:keyLabel="_" android:keyWidth="10%p" />
-        <Key android:codes="10" android:keyLabel="&#9166;" android:keyWidth="20%p" />
+        <Key android:codes="95" android:keyLabel="_" android:keyWidth="8%p" />
+        <Key android:codes="10" android:keyLabel="" android:keyWidth="22%p" />
     </Row>
 </Keyboard>

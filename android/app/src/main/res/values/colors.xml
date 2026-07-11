@@ -6,9 +6,19 @@
     <color name="text_primary">#1C1E21</color>
     <color name="text_muted">#6B7280</color>
 
+    <!-- Gboard-style keyboard theme (light) -->
+    <color name="keyboard_bg">#E9EAEE</color>
+    <color name="toolbar_bg">#E9EAEE</color>
+    <color name="toolbar_icon">#5F6368</color>
+    <color name="suggestion_text">#1F1F1F</color>
+
     <color name="key_background">#FFFFFF</color>
-    <color name="key_background_special">#D1D5DB</color>
-    <color name="key_background_pressed">#E5E7EB</color>
-    <color name="key_text">#1C1E21</color>
-    <color name="keyboard_background">#ECEDF0</color>
+    <color name="key_background_pressed">#D3D6DA</color>
+    <color name="key_shadow">#33000000</color>
+    <color name="key_text">#1F1F1F</color>
+    <color name="key_text_secondary">#5F6368</color>
+
+    <color name="accent_key_background">#4285F4</color>
+    <color name="accent_key_background_pressed">#3367D6</color>
+    <color name="accent_key_icon">#FFFFFF</color>
 </resources>
