@@ -39,7 +39,7 @@
         android:id="@+id/removeBtn"
         android:layout_width="36dp"
         android:layout_height="36dp"
-        android:background="?attr/selectableItemBackgroundBorderless"
+        android:background="?android:attr/selectableItemBackgroundBorderless"
         android:src="@android:drawable/ic_menu_delete"
         android:contentDescription="@string/action_clear" />
 

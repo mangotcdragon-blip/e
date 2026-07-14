@@ -4,7 +4,7 @@
     android:layout_height="wrap_content"
     android:orientation="horizontal"
     android:gravity="center_vertical"
-    android:background="?attr/selectableItemBackground"
+    android:background="?android:attr/selectableItemBackground"
     android:paddingTop="8dp"
     android:paddingBottom="8dp">
 
@@ -22,7 +22,7 @@
         android:id="@+id/clipItemRemove"
         android:layout_width="32dp"
         android:layout_height="32dp"
-        android:background="?attr/selectableItemBackgroundBorderless"
+        android:background="?android:attr/selectableItemBackgroundBorderless"
         android:src="@android:drawable/ic_menu_close_clear_cancel"
         android:contentDescription="@string/action_clear"
         android:tint="@color/key_text_secondary" />

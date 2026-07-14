@@ -19,7 +19,7 @@
             android:layout_width="36dp"
             android:layout_height="36dp"
             android:layout_margin="2dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
+            android:background="?android:attr/selectableItemBackgroundBorderless"
             android:src="@drawable/ic_toolbar_settings"
             android:contentDescription="@string/toolbar_settings"
             android:tint="@color/toolbar_icon" />
@@ -41,7 +41,7 @@
             android:layout_width="36dp"
             android:layout_height="36dp"
             android:layout_margin="2dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
+            android:background="?android:attr/selectableItemBackgroundBorderless"
             android:src="@drawable/ic_key_emoji"
             android:contentDescription="@string/toolbar_emoji"
             android:tint="@color/toolbar_icon" />
@@ -51,7 +51,7 @@
             android:layout_width="36dp"
             android:layout_height="36dp"
             android:layout_margin="2dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
+            android:background="?android:attr/selectableItemBackgroundBorderless"
             android:src="@drawable/ic_toolbar_clipboard"
             android:contentDescription="@string/toolbar_clipboard"
             android:tint="@color/toolbar_icon" />
@@ -61,7 +61,7 @@
             android:layout_width="36dp"
             android:layout_height="36dp"
             android:layout_margin="2dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
+            android:background="?android:attr/selectableItemBackgroundBorderless"
             android:src="@drawable/ic_toolbar_onehanded"
             android:contentDescription="@string/toolbar_one_handed"
             android:tint="@color/toolbar_icon" />
