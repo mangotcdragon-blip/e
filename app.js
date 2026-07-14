@@ -50,18 +50,12 @@
 
   function dbLoadAll() {
     return new Promise((resolve, reject) => {
+      // getAll() is a single bulk read handled internally by the browser; a manual
+      // cursor loop does one JS/native round-trip per record, which is dramatically
+      // slower once the store holds hundreds of thousands of rows.
       const tx = db.transaction(STORE_NAME, "readonly");
-      const req = tx.objectStore(STORE_NAME).openCursor();
-      const records = [];
-      req.onsuccess = (e) => {
-        const cursor = e.target.result;
-        if (cursor) {
-          records.push(cursor.value);
-          cursor.continue();
-        } else {
-          resolve(records);
-        }
-      };
+      const req = tx.objectStore(STORE_NAME).getAll();
+      req.onsuccess = () => resolve(req.result);
       req.onerror = () => reject(req.error);
     });
   }
