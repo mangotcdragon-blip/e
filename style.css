@@ -189,6 +189,46 @@ button.danger:hover {
   color: white;
 }
 
+.search-input {
+  width: 100%;
+  padding: 8px 10px;
+  margin-bottom: 6px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 0.9rem;
+}
+
+.search-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.count-text {
+  color: var(--muted);
+  font-size: 0.8rem;
+  margin-bottom: 6px;
+}
+
+.load-more {
+  width: 100%;
+  margin-top: 8px;
+  background: var(--panel-bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+
+.load-more:hover {
+  background: var(--bg);
+}
+
+.io-status {
+  color: var(--accent);
+  font-size: 0.82rem;
+  margin-top: 10px;
+}
+
 .io-actions {
   display: flex;
   gap: 8px;

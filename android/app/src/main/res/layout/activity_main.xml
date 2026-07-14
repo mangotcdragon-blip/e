@@ -94,6 +94,32 @@
             android:text="@string/action_add" />
     </LinearLayout>
 
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:layout_marginBottom="6dp">
+
+        <EditText
+            android:id="@+id/searchInput"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:hint="@string/hint_search"
+            android:inputType="text"
+            android:imeOptions="actionSearch"
+            android:maxLines="1" />
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/countText"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="6dp"
+        android:textColor="@color/text_muted"
+        android:textSize="12sp" />
+
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/ruleList"
         android:layout_width="match_parent"
@@ -108,6 +134,23 @@
         android:text="@string/empty_hint"
         android:textColor="@color/text_muted"
         android:padding="12dp"
+        android:visibility="gone" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/loadMoreBtn"
+        style="@style/Widget.MaterialComponents.Button.TextButton"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/action_load_more"
+        android:visibility="gone" />
+
+    <TextView
+        android:id="@+id/ioStatusText"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:textColor="@color/purple_500"
+        android:textSize="12sp"
         android:visibility="gone" />
 
     <LinearLayout

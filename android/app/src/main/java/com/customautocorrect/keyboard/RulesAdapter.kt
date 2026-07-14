@@ -19,6 +19,12 @@ class RulesAdapter(
         notifyDataSetChanged()
     }
 
+    fun appendList(moreItems: List<Rule>) {
+        val start = items.size
+        items.addAll(moreItems)
+        notifyItemRangeInserted(start, moreItems.size)
+    }
+
     class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
         val fromText: TextView = view.findViewById(R.id.fromText)
         val toText: TextView = view.findViewById(R.id.toText)

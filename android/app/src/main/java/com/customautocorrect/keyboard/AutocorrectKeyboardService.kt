@@ -2,7 +2,6 @@ package com.customautocorrect.keyboard
 
 import android.content.ClipboardManager
 import android.content.Intent
-import android.content.SharedPreferences
 import android.inputmethodservice.InputMethodService
 import android.inputmethodservice.Keyboard
 import android.os.Handler
@@ -59,21 +58,15 @@ class AutocorrectKeyboardService : InputMethodService(), android.inputmethodserv
 
     private var oneHandedState = OneHandedState.OFF
 
-    private var ruleMap: Map<String, String> = emptyMap()
     private val handler = Handler(Looper.getMainLooper())
     private var idleRunnable: Runnable? = null
     private var statusClearRunnable: Runnable? = null
-
-    private val prefsListener =
-        SharedPreferences.OnSharedPreferenceChangeListener { _, _ -> reloadDictionary() }
 
     private lateinit var systemClipboard: ClipboardManager
     private val clipListener = ClipboardManager.OnPrimaryClipChangedListener { captureClipboard() }
 
     override fun onCreate() {
         super.onCreate()
-        DictionaryStore.prefs(this).registerOnSharedPreferenceChangeListener(prefsListener)
-        reloadDictionary()
         oneHandedState = loadOneHandedState()
         systemClipboard = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
         systemClipboard.addPrimaryClipChangedListener(clipListener)
@@ -81,14 +74,8 @@ class AutocorrectKeyboardService : InputMethodService(), android.inputmethodserv
 
     override fun onDestroy() {
         super.onDestroy()
-        DictionaryStore.prefs(this).unregisterOnSharedPreferenceChangeListener(prefsListener)
         systemClipboard.removePrimaryClipChangedListener(clipListener)
         cancelIdleTimer()
-    }
-
-    private fun reloadDictionary() {
-        val rules = DictionaryStore.loadRules(this)
-        ruleMap = rules.associate { it.from.lowercase() to it.to }
     }
 
     private fun loadOneHandedState(): OneHandedState {
@@ -287,7 +274,7 @@ class AutocorrectKeyboardService : InputMethodService(), android.inputmethodserv
         val text = ic.getTextBeforeCursor(64, 0)?.toString() ?: return
         val word = extractTrailingWord(text)
         if (word.isEmpty()) return
-        val replacement = ruleMap[word.lowercase()] ?: return
+        val replacement = DictionaryStore.lookup(this, word) ?: return
         if (replacement == word) return
         ic.deleteSurroundingText(word.length, 0)
         ic.commitText(replacement, 1)

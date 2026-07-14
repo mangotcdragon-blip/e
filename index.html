@@ -41,7 +41,13 @@
         <button type="submit">Add</button>
       </form>
 
+      <input id="searchInput" type="text" class="search-input" placeholder="Search words…" autocomplete="off" />
+      <div id="countText" class="count-text"></div>
+
       <ul id="ruleList" class="rule-list"></ul>
+      <button id="loadMoreBtn" type="button" class="load-more" hidden>Load more</button>
+
+      <div id="ioStatus" class="io-status" hidden></div>
 
       <div class="io-actions">
         <button id="exportBtn" type="button">Export JSON</button>
