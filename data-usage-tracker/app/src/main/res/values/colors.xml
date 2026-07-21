@@ -1,0 +1,13 @@
+<resources>
+    <!-- Always-dark palette; this app does not follow the system light/dark setting. -->
+    <color name="background">#101114</color>
+    <color name="surface">#1B1D22</color>
+    <color name="surface_alt">#24262C</color>
+    <color name="accent">#7C9CFF</color>
+    <color name="accent_dim">#3A4470</color>
+    <color name="text_primary">#F2F3F5</color>
+    <color name="text_muted">#9AA0AC</color>
+    <color name="warning">#F5A623</color>
+    <color name="danger">#F56B6B</color>
+    <color name="progress_track">#2C2F36</color>
+</resources>

@@ -1,0 +1,31 @@
+<resources>
+    <string name="app_name">Data Tracker</string>
+    <string name="title_settings">Settings</string>
+
+    <string name="remaining_of">%1$s left of %2$s</string>
+    <string name="used_label">%1$s used this cycle</string>
+    <string name="cycle_range">Cycle: %1$s – %2$s</string>
+    <string name="rollover_note">Includes %1$s rolled over from last cycle</string>
+
+    <string name="action_settings">Settings</string>
+    <string name="action_refresh">Refresh</string>
+    <string name="action_grant_access">Grant usage access</string>
+    <string name="action_save">Save</string>
+
+    <string name="permission_needed_title">Usage access needed</string>
+    <string name="permission_needed_body">This app needs the "Usage access" permission to read your mobile data usage. Android requires this to be granted from Settings, not a normal popup.</string>
+
+    <string name="setup_needed_title">Set up your plan</string>
+    <string name="setup_needed_body">Tell Data Tracker how much data you get each month and when your billing cycle resets.</string>
+
+    <string name="label_allowance">Monthly data allowance (GB)</string>
+    <string name="label_reset_day">Reset day of month</string>
+    <string name="label_reset_time">Reset time</string>
+    <string name="label_rollover">Roll over unused data from last cycle</string>
+
+    <string name="hint_allowance">e.g. 20</string>
+    <string name="hint_reset_day">1–31</string>
+
+    <string name="notification_channel_name">Data usage</string>
+    <string name="notification_channel_desc">Shows remaining mobile data for the current billing cycle</string>
+</resources>
