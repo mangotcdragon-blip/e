@@ -84,11 +84,31 @@ class MainActivity : AppCompatActivity() {
         val end = Instant.ofEpochMilli(snapshot.cycleEndMillis).atZone(ZoneId.systemDefault()).format(dateFormatter)
         binding.cycleRangeText.text = getString(R.string.cycle_range, start, end)
 
-        if (snapshot.rolloverBytes > 0) {
-            binding.rolloverText.visibility = View.VISIBLE
-            binding.rolloverText.text = getString(R.string.rollover_note, ByteFormat.format(snapshot.rolloverBytes))
-        } else {
-            binding.rolloverText.visibility = View.GONE
+        when {
+            snapshot.rolloverApplied -> {
+                binding.rolloverText.visibility = View.VISIBLE
+                val prevStart = Instant.ofEpochMilli(snapshot.previousCycleStartMillis)
+                    .atZone(ZoneId.systemDefault()).format(dateFormatter)
+                val prevEnd = Instant.ofEpochMilli(snapshot.previousCycleEndMillis)
+                    .atZone(ZoneId.systemDefault()).format(dateFormatter)
+                binding.rolloverText.text = getString(
+                    R.string.rollover_note,
+                    ByteFormat.format(snapshot.rolloverBytes),
+                    ByteFormat.format(snapshot.previousUsedBytes),
+                    ByteFormat.format(snapshot.allowanceBytes),
+                    prevStart,
+                    prevEnd
+                )
+            }
+            prefs.rolloverEnabled -> {
+                binding.rolloverText.visibility = View.VISIBLE
+                binding.rolloverText.text = getString(R.string.rollover_pending_note)
+            }
+            else -> {
+                binding.rolloverText.visibility = View.GONE
+            }
         }
+
+        binding.dataUnavailableText.visibility = if (snapshot.usageDataAvailable) View.GONE else View.VISIBLE
     }
 }

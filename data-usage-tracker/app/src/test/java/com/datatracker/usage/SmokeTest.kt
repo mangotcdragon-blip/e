@@ -6,6 +6,8 @@ import android.view.View
 import androidx.test.core.app.ApplicationProvider
 import androidx.work.Configuration
 import androidx.work.testing.WorkManagerTestInitHelper
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -117,17 +119,23 @@ class SmokeTest {
     }
 
     @Test
-    fun `dictionary-free repository handles missing usage access gracefully`() {
+    fun `repository handles missing usage access gracefully without doubling the total`() {
         val context = ApplicationProvider.getApplicationContext<android.app.Application>()
         val repo = DataUsageRepository(context)
         val prefs = PrefsStore(context)
         prefs.allowanceBytes = ByteFormat.gbToBytes(10.0)
         prefs.resetDay = 1
+        prefs.isConfigured = true
+        prefs.firstConfiguredAtMillis = 1L // long enough ago that rollover would be eligible
 
-        // Usage access isn't granted in this test environment; the repository should
-        // return a zeroed-out snapshot rather than throwing.
+        // Usage access isn't granted in this test environment; the repository should return a
+        // snapshot that flags data as unavailable, not silently credit a full rollover on top
+        // of the allowance (the "2 GB for 1 GB entered" bug).
         val snapshot = repo.currentSnapshot(prefs)
         assertTrue(snapshot.usedBytes == 0L)
         assertTrue(snapshot.remainingBytes >= 0L)
+        assertFalse("missing usage access should not silently grant a full rollover", snapshot.rolloverApplied)
+        assertEquals(prefs.allowanceBytes, snapshot.totalBytes)
+        assertFalse("usageDataAvailable should be false when access is missing", snapshot.usageDataAvailable)
     }
 }

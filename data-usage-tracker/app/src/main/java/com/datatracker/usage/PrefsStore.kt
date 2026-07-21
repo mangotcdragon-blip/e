@@ -29,6 +29,11 @@ class PrefsStore(context: Context) {
         get() = prefs.getBoolean(KEY_CONFIGURED, false)
         set(value) = prefs.edit().putBoolean(KEY_CONFIGURED, value).apply()
 
+    /** Set once, the first time the user ever saves settings -- see [RolloverPolicy]. */
+    var firstConfiguredAtMillis: Long
+        get() = prefs.getLong(KEY_FIRST_CONFIGURED_AT, 0L)
+        set(value) = prefs.edit().putLong(KEY_FIRST_CONFIGURED_AT, value).apply()
+
     companion object {
         private const val PREFS_NAME = "data_tracker_prefs"
         private const val KEY_ALLOWANCE = "allowance_bytes"
@@ -37,6 +42,7 @@ class PrefsStore(context: Context) {
         private const val KEY_RESET_MINUTE = "reset_minute"
         private const val KEY_ROLLOVER = "rollover_enabled"
         private const val KEY_CONFIGURED = "is_configured"
+        private const val KEY_FIRST_CONFIGURED_AT = "first_configured_at"
         const val DEFAULT_ALLOWANCE_BYTES = 10L * 1024 * 1024 * 1024 // 10 GB
     }
 }

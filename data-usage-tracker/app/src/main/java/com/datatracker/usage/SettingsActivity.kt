@@ -62,6 +62,10 @@ class SettingsActivity : AppCompatActivity() {
             return
         }
 
+        if (!prefs.isConfigured) {
+            prefs.firstConfiguredAtMillis = System.currentTimeMillis()
+        }
+
         prefs.allowanceBytes = ByteFormat.gbToBytes(allowanceGb)
         prefs.resetDay = resetDay
         prefs.resetHour = resetHour

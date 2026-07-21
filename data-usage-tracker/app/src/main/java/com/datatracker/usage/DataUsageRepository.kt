@@ -13,9 +13,16 @@ class DataUsageRepository(private val context: Context) {
     data class UsageSnapshot(
         val allowanceBytes: Long,
         val rolloverBytes: Long,
+        val rolloverApplied: Boolean,
         val usedBytes: Long,
         val cycleStartMillis: Long,
-        val cycleEndMillis: Long
+        val cycleEndMillis: Long,
+        val previousCycleStartMillis: Long,
+        val previousCycleEndMillis: Long,
+        val previousUsedBytes: Long,
+        /** False if a usage query threw despite having usage access -- the numbers above may
+         * be incomplete/zero rather than reflecting a genuine zero-usage cycle. */
+        val usageDataAvailable: Boolean
     ) {
         val totalBytes: Long get() = allowanceBytes + rolloverBytes
         val remainingBytes: Long get() = (totalBytes - usedBytes).coerceAtLeast(0)
@@ -43,25 +50,45 @@ class DataUsageRepository(private val context: Context) {
         val (current, previous) = CycleCalculator.currentAndPreviousCycle(
             now, prefs.resetDay, prefs.resetHour, prefs.resetMinute
         )
+
         val usedThisCycle = queryMobileBytes(current.startEpochMillis, current.endEpochMillis)
-        val rollover = if (prefs.rolloverEnabled) {
-            val usedPreviousCycle = queryMobileBytes(previous.startEpochMillis, previous.endEpochMillis)
-            (prefs.allowanceBytes - usedPreviousCycle).coerceAtLeast(0)
+        val rolloverEligible = RolloverPolicy.shouldApplyRollover(
+            prefs.rolloverEnabled, prefs.firstConfiguredAtMillis, previous.startEpochMillis
+        )
+        val previousUsed = if (rolloverEligible) {
+            queryMobileBytes(previous.startEpochMillis, previous.endEpochMillis)
+        } else {
+            null
+        }
+        // Only actually apply rollover once we have a *real* reading for the previous cycle --
+        // falling back to "assume 0 used" when the query fails would credit a full extra
+        // allowance's worth of rollover, the same bug this whole flow exists to avoid.
+        val rolloverApplied = rolloverEligible && previousUsed != null
+        val rollover = if (rolloverApplied) {
+            (prefs.allowanceBytes - previousUsed!!).coerceAtLeast(0)
         } else {
             0L
         }
+
         return UsageSnapshot(
             allowanceBytes = prefs.allowanceBytes,
             rolloverBytes = rollover,
-            usedBytes = usedThisCycle,
+            rolloverApplied = rolloverApplied,
+            usedBytes = usedThisCycle ?: 0L,
             cycleStartMillis = current.startEpochMillis,
-            cycleEndMillis = current.endEpochMillis
+            cycleEndMillis = current.endEpochMillis,
+            previousCycleStartMillis = previous.startEpochMillis,
+            previousCycleEndMillis = previous.endEpochMillis,
+            previousUsedBytes = previousUsed ?: 0L,
+            usageDataAvailable = usedThisCycle != null && (!rolloverEligible || previousUsed != null)
         )
     }
 
-    private fun queryMobileBytes(startMillis: Long, endMillis: Long): Long {
+    /** Returns null (rather than 0) when the reading genuinely couldn't be obtained, so callers
+     * can distinguish "no usage happened" from "we don't actually know." */
+    private fun queryMobileBytes(startMillis: Long, endMillis: Long): Long? {
         if (endMillis <= startMillis) return 0L
-        if (!hasUsageAccess()) return 0L
+        if (!hasUsageAccess()) return null
         return try {
             val statsManager =
                 context.getSystemService(Context.NETWORK_STATS_SERVICE) as NetworkStatsManager
@@ -72,7 +99,7 @@ class DataUsageRepository(private val context: Context) {
             )
             bucket.rxBytes + bucket.txBytes
         } catch (e: Exception) {
-            0L
+            null
         }
     }
 }
