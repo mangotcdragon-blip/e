@@ -89,17 +89,34 @@ class DataUsageRepository(private val context: Context) {
     private fun queryMobileBytes(startMillis: Long, endMillis: Long): Long? {
         if (endMillis <= startMillis) return 0L
         if (!hasUsageAccess()) return null
+
+        // Apps with just "Usage access" (not carrier/system-privileged) cannot read a specific
+        // SIM's real subscriber ID (IMSI) on Android 10+, so there's no way to scope this query
+        // to one SIM on a dual-SIM device. Passing null is the documented way to get *combined*
+        // mobile data across all active subscriptions; an empty string is a different value that
+        // does not reliably mean the same thing and produced wrong/missing totals on dual-SIM
+        // devices. Kept as a fallback in case some OS version rejects null outright.
         return try {
-            val statsManager =
-                context.getSystemService(Context.NETWORK_STATS_SERVICE) as NetworkStatsManager
-            // Empty subscriberId matches any mobile subscription; apps cannot read the real IMSI
-            // without a privileged/carrier permission, and this is the standard workaround.
-            val bucket = statsManager.querySummaryForDevice(
-                ConnectivityManager.TYPE_MOBILE, "", startMillis, endMillis
-            )
-            bucket.rxBytes + bucket.txBytes
+            val statsManager = context.getSystemService(Context.NETWORK_STATS_SERVICE) as NetworkStatsManager
+            try {
+                queryBytes(statsManager, startMillis, endMillis, subscriberId = null)
+            } catch (e: Exception) {
+                queryBytes(statsManager, startMillis, endMillis, subscriberId = "")
+            }
         } catch (e: Exception) {
             null
         }
+    }
+
+    private fun queryBytes(
+        statsManager: NetworkStatsManager,
+        startMillis: Long,
+        endMillis: Long,
+        subscriberId: String?
+    ): Long {
+        val bucket = statsManager.querySummaryForDevice(
+            ConnectivityManager.TYPE_MOBILE, subscriberId, startMillis, endMillis
+        )
+        return bucket.rxBytes + bucket.txBytes
     }
 }
