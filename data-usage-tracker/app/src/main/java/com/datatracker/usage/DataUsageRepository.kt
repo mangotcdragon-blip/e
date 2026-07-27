@@ -52,18 +52,17 @@ class DataUsageRepository(private val context: Context) {
         )
 
         val usedThisCycle = queryMobileBytes(current.startEpochMillis, current.endEpochMillis)
-        val rolloverEligible = RolloverPolicy.shouldApplyRollover(
-            prefs.rolloverEnabled, prefs.firstConfiguredAtMillis, previous.startEpochMillis
-        )
-        val previousUsed = if (rolloverEligible) {
+        val previousUsed = if (prefs.rolloverEnabled) {
             queryMobileBytes(previous.startEpochMillis, previous.endEpochMillis)
         } else {
             null
         }
-        // Only actually apply rollover once we have a *real* reading for the previous cycle --
-        // falling back to "assume 0 used" when the query fails would credit a full extra
-        // allowance's worth of rollover, the same bug this whole flow exists to avoid.
-        val rolloverApplied = rolloverEligible && previousUsed != null
+        // Android tracks usage at the OS level independent of when this app was installed, so
+        // a real reading for the previous cycle is trustworthy regardless of how recently the
+        // user set the app up. The only thing that should block rollover is *not having* a real
+        // reading -- falling back to "assume 0 used" when the query fails would credit a full
+        // extra allowance's worth of rollover, which is the bug this check exists to avoid.
+        val rolloverApplied = prefs.rolloverEnabled && previousUsed != null
         val rollover = if (rolloverApplied) {
             (prefs.allowanceBytes - previousUsed!!).coerceAtLeast(0)
         } else {
@@ -80,7 +79,7 @@ class DataUsageRepository(private val context: Context) {
             previousCycleStartMillis = previous.startEpochMillis,
             previousCycleEndMillis = previous.endEpochMillis,
             previousUsedBytes = previousUsed ?: 0L,
-            usageDataAvailable = usedThisCycle != null && (!rolloverEligible || previousUsed != null)
+            usageDataAvailable = usedThisCycle != null && (!prefs.rolloverEnabled || previousUsed != null)
         )
     }
 

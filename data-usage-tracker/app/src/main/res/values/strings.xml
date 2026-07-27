@@ -6,7 +6,6 @@
     <string name="used_label">%1$s used this cycle</string>
     <string name="cycle_range">Cycle: %1$s – %2$s</string>
     <string name="rollover_note">Includes %1$s rolled over (%2$s unused of %3$s last cycle, %4$s–%5$s)</string>
-    <string name="rollover_pending_note">Rollover starts after your first full cycle in this app</string>
     <string name="data_unavailable_note">Couldn\'t read usage data for part of this cycle — numbers below may be incomplete</string>
 
     <string name="action_settings">Settings</string>

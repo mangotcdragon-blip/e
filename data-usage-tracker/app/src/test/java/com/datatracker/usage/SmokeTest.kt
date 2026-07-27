@@ -126,7 +126,6 @@ class SmokeTest {
         prefs.allowanceBytes = ByteFormat.gbToBytes(10.0)
         prefs.resetDay = 1
         prefs.isConfigured = true
-        prefs.firstConfiguredAtMillis = 1L // long enough ago that rollover would be eligible
 
         // Usage access isn't granted in this test environment; the repository should return a
         // snapshot that flags data as unavailable, not silently credit a full rollover on top
