@@ -1,0 +1,24 @@
+<resources>
+    <color name="purple_500">#4F46E5</color>
+    <color name="purple_700">#4338CA</color>
+    <color name="background">#F5F6F8</color>
+    <color name="surface">#FFFFFF</color>
+    <color name="text_primary">#1C1E21</color>
+    <color name="text_muted">#6B7280</color>
+
+    <!-- Gboard-style keyboard theme (light) -->
+    <color name="keyboard_bg">#E9EAEE</color>
+    <color name="toolbar_bg">#E9EAEE</color>
+    <color name="toolbar_icon">#5F6368</color>
+    <color name="suggestion_text">#1F1F1F</color>
+
+    <color name="key_background">#FFFFFF</color>
+    <color name="key_background_pressed">#D3D6DA</color>
+    <color name="key_shadow">#33000000</color>
+    <color name="key_text">#1F1F1F</color>
+    <color name="key_text_secondary">#5F6368</color>
+
+    <color name="accent_key_background">#4285F4</color>
+    <color name="accent_key_background_pressed">#3367D6</color>
+    <color name="accent_key_icon">#FFFFFF</color>
+</resources>
