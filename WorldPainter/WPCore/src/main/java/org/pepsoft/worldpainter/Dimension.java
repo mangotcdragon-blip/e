@@ -380,6 +380,23 @@ public class Dimension extends InstanceKeeper implements TileProvider, Serializa
         return new Rectangle(lowestX, lowestY, (highestX - lowestX) + 1, (highestY - lowestY) + 1);
     }
 
+    /**
+     * The area this dimension covers, in <em>block</em> coordinates.
+     *
+     * <p>{@link #getExtent()} returns tile coordinates, which is what most of WorldPainter works in but is a ready
+     * source of confusion for anything that deals in blocks. This is that rectangle multiplied out.
+     *
+     * @return The extent in block coordinates, or an empty rectangle if the dimension has no tiles.
+     */
+    public Rectangle getBlockExtent() {
+        if (tiles.isEmpty()) {
+            return new Rectangle();
+        }
+        final Rectangle extent = getExtent();
+        return new Rectangle(extent.x << TILE_SIZE_BITS, extent.y << TILE_SIZE_BITS,
+                extent.width << TILE_SIZE_BITS, extent.height << TILE_SIZE_BITS);
+    }
+
     public int getTileCount() {
         return tiles.size();
     }

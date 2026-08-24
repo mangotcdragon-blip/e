@@ -185,6 +185,22 @@ public class BlenderTest {
     }
 
     /**
+     * Blending with no area given has to blend the whole map. {@code Dimension.getExtent()} is in tile coordinates,
+     * so taking it for a block rectangle would blend a single column and quietly do nothing.
+     */
+    @Test
+    public void blendingWithoutAnAreaCoversTheWholeMap() throws OperationCancelled {
+        GpuSettings.setMode(GpuSettings.Mode.OFF);
+        final Dimension dimension = createTestDimension();
+
+        final BlendReport report = new Blender(BlendSettings.builder().terrainMode(BlendMode.ORGANIC).terrainRadius(6).build())
+                .blend(dimension, null);
+
+        assertEquals(AREA.width * AREA.height, report.getColumnsExamined());
+        assertTrue("blending the whole map should have changed something", report.getTerrainChanged() > 0);
+    }
+
+    /**
      * A dimension two tiles square: grass on the left, sand on the right, with a terraced height map so that there is
      * something for the height blend to smooth.
      */

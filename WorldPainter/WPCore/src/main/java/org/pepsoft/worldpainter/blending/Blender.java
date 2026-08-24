@@ -53,7 +53,7 @@ public final class Blender {
      * Blend an entire dimension.
      */
     public BlendReport blend(Dimension dimension, ProgressReceiver progressReceiver) throws OperationCancelled {
-        return blend(dimension, dimension.getExtent(), progressReceiver);
+        return blend(dimension, dimension.getBlockExtent(), progressReceiver);
     }
 
     /**
