@@ -1,0 +1,12 @@
+.idea
+*.iml
+logs
+exporttimings.csv
+target
+*.code-workspace
+exports
+# Local build/test scratch
+*.log
+.classpath
+.project
+.settings
