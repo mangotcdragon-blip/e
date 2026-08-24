@@ -10,6 +10,8 @@ import org.pepsoft.minecraft.ChunkFactory;
 import org.pepsoft.minecraft.Material;
 import org.pepsoft.util.PerlinNoise;
 import org.pepsoft.worldpainter.*;
+import org.pepsoft.worldpainter.gpu.GpuSettings;
+import org.pepsoft.worldpainter.gpu.StoneMixKernel;
 import org.pepsoft.worldpainter.layers.*;
 import org.pepsoft.worldpainter.objects.WPObject;
 import org.pepsoft.worldpainter.plugins.BlockBasedPlatformProvider;
@@ -154,6 +156,11 @@ public class WorldPainterChunkFactory implements ChunkFactory {
             }
         }
 
+        // Generating the subsurface is the bulk of the arithmetic in a chunk: three Perlin noise evaluations for every
+        // block from bedrock up to a few below the surface. Where there is a GPU, the whole chunk's worth is computed
+        // in one dispatch here and the loop below just reads the answers off.
+        final SubsurfaceVolume subsurface = prepareSubsurface(tile, xOffsetInTile, yOffsetInTile);
+
         for (int x = 0; x < 16; x++) {
             for (int z = 0; z < 16; z++) {
                 final int xInTile = xOffsetInTile | x;
@@ -189,7 +196,7 @@ public class WorldPainterChunkFactory implements ChunkFactory {
                     if (bedrock) {
                         chunk.setMaterial(x, minHeight, z, BEDROCK);
                     }
-                    applySubSurface(tile, chunk, xInTile, yInTile, minHeight);
+                    applySubSurface(tile, chunk, xInTile, yInTile, minHeight, subsurface);
                     applyTopLayer(tile, chunk, xInTile, yInTile, minHeight, false);
                     if (! underWater) {
                         // Above the surface on dry land
@@ -314,22 +321,112 @@ public class WorldPainterChunkFactory implements ChunkFactory {
     }
 
     public void applySubSurface(Tile tile, Chunk chunk, int xInTile, int yInTile, int minZ) {
+        applySubSurface(tile, chunk, xInTile, yInTile, minZ, null);
+    }
+
+    private void applySubSurface(Tile tile, Chunk chunk, int xInTile, int yInTile, int minZ, SubsurfaceVolume volume) {
         final int worldX = (tile.getX() << 7) | xInTile, worldY = (tile.getY() << 7) | yInTile, x = xInTile & 0xf, z = yInTile & 0xf;
         final int intHeight = tile.getIntHeight(xInTile, yInTile);
-        final int topLayerDepth = dimension.getTopLayerDepth(worldX, worldY, intHeight);
         final int subSurfaceLayerOffset = subSurfaceLayersRelativeToTerrain ? -(intHeight - subSurfacePatternHeight + 1) : 0;
-        int subsurfaceMaxHeight = intHeight - topLayerDepth;
-        if (coverSteepTerrain) {
-            subsurfaceMaxHeight = Math.min(subsurfaceMaxHeight,
-                    Math.min(Math.min(dimension.getIntHeightAt(worldX - 1, worldY, Integer.MAX_VALUE),
-                                    dimension.getIntHeightAt(worldX + 1, worldY, Integer.MAX_VALUE)),
-                            Math.min(dimension.getIntHeightAt(worldX, worldY - 1, Integer.MAX_VALUE),
-                                    dimension.getIntHeightAt(worldX, worldY + 1, Integer.MAX_VALUE))));
-        }
-        for (int y = Math.max(minHeight + (bedrock ? 1 : 0), minZ); y <= subsurfaceMaxHeight; y++) {
+        final int subsurfaceMaxHeight = getSubsurfaceMaxHeight(worldX, worldY, intHeight);
+        final int lowestY = Math.max(minHeight + (bedrock ? 1 : 0), minZ);
+        for (int y = lowestY; y <= subsurfaceMaxHeight; y++) {
             // Sub surface
-            chunk.setMaterial(x, y, z, subsurfaceMaterial.getMaterial(platform, seed, worldX, worldY, y + subSurfaceLayerOffset, intHeight + subSurfaceLayerOffset));
+            final Material material = (volume != null) ? volume.getMaterial(x, z, y) : null;
+            chunk.setMaterial(x, y, z, (material != null)
+                    ? material
+                    : subsurfaceMaterial.getMaterial(platform, seed, worldX, worldY, y + subSurfaceLayerOffset, intHeight + subSurfaceLayerOffset));
         }
+    }
+
+    /**
+     * The highest block of a column that is still below the top layer, and therefore made of the subsurface material.
+     */
+    private int getSubsurfaceMaxHeight(int worldX, int worldY, int intHeight) {
+        final int subsurfaceMaxHeight = intHeight - dimension.getTopLayerDepth(worldX, worldY, intHeight);
+        if (! coverSteepTerrain) {
+            return subsurfaceMaxHeight;
+        }
+        return Math.min(subsurfaceMaxHeight,
+                Math.min(Math.min(dimension.getIntHeightAt(worldX - 1, worldY, Integer.MAX_VALUE),
+                                dimension.getIntHeightAt(worldX + 1, worldY, Integer.MAX_VALUE)),
+                        Math.min(dimension.getIntHeightAt(worldX, worldY - 1, Integer.MAX_VALUE),
+                                dimension.getIntHeightAt(worldX, worldY + 1, Integer.MAX_VALUE))));
+    }
+
+    /**
+     * Generate the subsurface material of an entire chunk on the GPU, if there is one and this dimension's subsurface
+     * material is one the kernels know how to produce.
+     *
+     * @return The generated volume, or {@code null} if the chunk is to be generated on the CPU as before.
+     */
+    private SubsurfaceVolume prepareSubsurface(Tile tile, int xOffsetInTile, int yOffsetInTile) {
+        if ((subsurfaceMaterial != Terrain.STONE_MIX) || subSurfaceLayersRelativeToTerrain) {
+            return null;
+        }
+        final StoneMixKernel kernel = StoneMixKernel.get(seed);
+        if (kernel == null) {
+            return null;
+        }
+        final int[] columns = new int[CHUNK_COLUMN_COUNT * StoneMixKernel.COLUMN_STRIDE];
+        final int lowestY = minHeight + (bedrock ? 1 : 0);
+        int highestY = Integer.MIN_VALUE, index = 0;
+        for (int x = 0; x < 16; x++) {
+            for (int z = 0; z < 16; z++) {
+                final int xInTile = xOffsetInTile | x, yInTile = yOffsetInTile | z;
+                final int worldX = (tile.getX() << TILE_SIZE_BITS) | xInTile, worldY = (tile.getY() << TILE_SIZE_BITS) | yInTile;
+                int columnMaxY = -1;
+                if (! tile.getBitLayerValue(org.pepsoft.worldpainter.layers.Void.INSTANCE, xInTile, yInTile)) {
+                    columnMaxY = getSubsurfaceMaxHeight(worldX, worldY, tile.getIntHeight(xInTile, yInTile));
+                    if (columnMaxY >= lowestY) {
+                        highestY = Math.max(highestY, columnMaxY);
+                    }
+                }
+                columns[index++] = worldX;
+                columns[index++] = worldY;
+                columns[index++] = lowestY;
+                columns[index++] = columnMaxY;
+            }
+        }
+        if (highestY < lowestY) {
+            return null;
+        }
+        final int depth = highestY - lowestY + 1;
+        if ((CHUNK_COLUMN_COUNT * depth) < GpuSettings.getMinimumBatchSize()) {
+            // Too little work to be worth the round trip to the device
+            return null;
+        }
+        final byte[] palette = kernel.generate(columns, CHUNK_COLUMN_COUNT, lowestY, depth, 0);
+        return (palette != null) ? new SubsurfaceVolume(palette, lowestY, depth) : null;
+    }
+
+    /**
+     * A chunk's worth of subsurface material indices, as produced by {@link StoneMixKernel}.
+     */
+    private static final class SubsurfaceVolume {
+        SubsurfaceVolume(byte[] palette, int lowestY, int depth) {
+            this.palette = palette;
+            this.lowestY = lowestY;
+            this.depth = depth;
+        }
+
+        /**
+         * The material for one block, or {@code null} if the caller has to work it out itself: either the block is
+         * outside the volume, or it is in the band the kernel deliberately leaves to the CPU.
+         */
+        Material getMaterial(int x, int z, int y) {
+            final int offset = y - lowestY;
+            if ((offset < 0) || (offset >= depth)) {
+                return null;
+            }
+            final byte index = palette[(((x << 4) | z) * depth) + offset];
+            return ((index == StoneMixKernel.NONE) || (index == StoneMixKernel.HOST))
+                    ? null
+                    : StoneMixKernel.PALETTE[index & 0xff];
+        }
+
+        private final byte[] palette;
+        private final int lowestY, depth;
     }
 
     public void renderObject(Chunk chunk, WPObject object, int x, int y, int z) {
@@ -379,6 +476,9 @@ public class WorldPainterChunkFactory implements ChunkFactory {
     private final boolean bedrock, coverSteepTerrain, topLayersRelativeToTerrain, subSurfaceLayersRelativeToTerrain, biomesSupported2D, biomesSupported3D, biomesSupportedNamed, copyBiomes;
     private final Dimension.WallType roofType;
     private final Integer undergroundBiome;
+
+    /** The number of columns in a chunk. */
+    private static final int CHUNK_COLUMN_COUNT = 16 * 16;
 
     public static final long SUGAR_CANE_SEED_OFFSET = 127411424;
     public static final float SUGAR_CANE_CHANCE = PerlinNoise.getLevelForPromillage(325);

@@ -12,6 +12,8 @@ import org.pepsoft.util.Version;
 import org.pepsoft.worldpainter.*;
 import org.pepsoft.worldpainter.exporting.AbstractLayerExporter;
 import org.pepsoft.worldpainter.exporting.FirstPassLayerExporter;
+import org.pepsoft.worldpainter.gpu.GpuSettings;
+import org.pepsoft.worldpainter.gpu.ResourceLayerKernel;
 import org.pepsoft.worldpainter.layers.Resources;
 import org.pepsoft.worldpainter.layers.Void;
 
@@ -66,6 +68,15 @@ public class ResourcesExporter extends AbstractLayerExporter<Resources> implemen
                 noiseGenerators[i].setSeed(dimension.getSeed() + seedOffsets[i]);
             }
         }
+        // Dirt and gravel form much larger pockets than the ores do, and are sampled at a coarser scale
+        smallBlobScale = new boolean[this.activeMaterials.length];
+        for (int i = 0; i < this.activeMaterials.length; i++) {
+            smallBlobScale[i] = this.activeMaterials[i].isNamedOneOf(MC_DIRT, MC_GRAVEL);
+        }
+        // Placing resources is the most arithmetic heavy part of an export by a wide margin: a dozen Perlin noise
+        // evaluations for every block below the surface. Hand it to the GPU if there is one that can be trusted with
+        // it; gpuKernel stays null otherwise and the loop below runs on the CPU as it always has.
+        gpuKernel = ResourceLayerKernel.get(dimension.getSeed(), seedOffsets, minLevels, maxLevels, chances, smallBlobScale);
     }
 
     @Override
@@ -79,6 +90,9 @@ public class ResourcesExporter extends AbstractLayerExporter<Resources> implemen
         final int xOffset = (chunk.getxPos() & 7) << 4;
         final int zOffset = (chunk.getzPos() & 7) << 4;
         final boolean coverSteepTerrain = dimension.isCoverSteepTerrain(), nether = (dimension.getAnchor().dim == DIM_NETHER);
+        if ((gpuKernel != null) && renderOnGpu(tile, chunk, minHeightField, minimumLevel, xOffset, zOffset, coverSteepTerrain, nether)) {
+            return;
+        }
 //        int[] counts = new int[256];
         for (int x = 0; x < 16; x++) {
             for (int z = 0; z < 16; z++) {
@@ -117,14 +131,7 @@ public class ResourcesExporter extends AbstractLayerExporter<Resources> implemen
                                         ? (noiseGenerators[i].getPerlinNoise(dirtX, dirtY, dirtZ) >= chance)
                                         : (noiseGenerators[i].getPerlinNoise(dx, dy, dz) >= chance))) {
 //                                counts[oreType]++;
-                                final Material existingMaterial = chunk.getMaterial(x, y, z);
-                                if (existingMaterial.isNamed(MC_DEEPSLATE) && ORE_TO_DEEPSLATE_VARIANT.containsKey(activeMaterials[i].name)) {
-                                    chunk.setMaterial(x, y, z, ORE_TO_DEEPSLATE_VARIANT.get(activeMaterials[i].name));
-                                } else if (nether && (activeMaterials[i].isNamed(MC_GOLD_ORE))) {
-                                    chunk.setMaterial(x, y, z, NETHER_GOLD_ORE);
-                                } else {
-                                    chunk.setMaterial(x, y, z, activeMaterials[i]);
-                                }
+                                place(chunk, x, y, z, activeMaterials[i], nether);
                                 break;
                             }
                         }
@@ -143,10 +150,107 @@ public class ResourcesExporter extends AbstractLayerExporter<Resources> implemen
 
 //  TODO: resource frequenties onderzoeken met Statistics tool!
 
+    /**
+     * Place one resource block, substituting the deepslate or nether variant of the material where the game has one.
+     */
+    private void place(Chunk chunk, int x, int y, int z, Material material, boolean nether) {
+        final Material existingMaterial = chunk.getMaterial(x, y, z);
+        if (existingMaterial.isNamed(MC_DEEPSLATE) && ORE_TO_DEEPSLATE_VARIANT.containsKey(material.name)) {
+            chunk.setMaterial(x, y, z, ORE_TO_DEEPSLATE_VARIANT.get(material.name));
+        } else if (nether && material.isNamed(MC_GOLD_ORE)) {
+            chunk.setMaterial(x, y, z, NETHER_GOLD_ORE);
+        } else {
+            chunk.setMaterial(x, y, z, material);
+        }
+    }
+
+    /**
+     * Render the layer for one chunk on the GPU.
+     *
+     * <p>The chunk is described to the device as 256 columns, each with the range of y values to consider and the
+     * value of the Resources layer there. What comes back is one byte per block saying which material to place, which
+     * is then applied here exactly as the CPU loop would have.
+     *
+     * @return {@code true} if the chunk was rendered. {@code false} means the GPU declined the work (it was too small
+     * to be worth the transfer, or the device failed) and the caller has to render the chunk on the CPU.
+     */
+    private boolean renderOnGpu(Tile tile, Chunk chunk, HeightMap minHeightField, int minimumLevel, int xOffset,
+                                int zOffset, boolean coverSteepTerrain, boolean nether) {
+        final int[] columns = new int[COLUMN_COUNT * ResourceLayerKernel.COLUMN_STRIDE];
+        int lowestY = Integer.MAX_VALUE, highestY = Integer.MIN_VALUE, index = 0;
+        for (int x = 0; x < 16; x++) {
+            for (int z = 0; z < 16; z++) {
+                final int localX = xOffset + x, localY = zOffset + z;
+                final int worldX = tile.getX() * TILE_SIZE + localX, worldY = tile.getY() * TILE_SIZE + localY;
+                // An empty column is described as a range that cannot contain anything, which the kernel skips
+                int columnMinZ = 0, columnMaxZ = -1, resourcesValue = 0;
+                if (! tile.getBitLayerValue(Void.INSTANCE, localX, localY)) {
+                    resourcesValue = Math.max(minimumLevel, tile.getLayerValue(Resources.INSTANCE, localX, localY));
+                    if (resourcesValue > 0) {
+                        final int terrainheight = tile.getIntHeight(localX, localY);
+                        final int topLayerDepth = dimension.getTopLayerDepth(worldX, worldY, terrainheight);
+                        int subsurfaceMaxHeight = terrainheight - topLayerDepth;
+                        if (coverSteepTerrain) {
+                            subsurfaceMaxHeight = Math.min(subsurfaceMaxHeight,
+                                    Math.min(Math.min(dimension.getIntHeightAt(worldX - 1, worldY, Integer.MAX_VALUE),
+                                            dimension.getIntHeightAt(worldX + 1, worldY, Integer.MAX_VALUE)),
+                                            Math.min(dimension.getIntHeightAt(worldX, worldY - 1, Integer.MAX_VALUE),
+                                                    dimension.getIntHeightAt(worldX, worldY + 1, Integer.MAX_VALUE))));
+                        }
+                        columnMinZ = (minHeightField != null) ? (int) floor(minHeightField.getHeight(worldX, worldY)) : this.minZ;
+                        columnMaxZ = Math.min(subsurfaceMaxHeight, maxZ);
+                        if (columnMaxZ >= columnMinZ) {
+                            lowestY = Math.min(lowestY, columnMinZ);
+                            highestY = Math.max(highestY, columnMaxZ);
+                        }
+                    }
+                }
+                columns[index++] = worldX;
+                columns[index++] = worldY;
+                columns[index++] = columnMinZ;
+                columns[index++] = columnMaxZ;
+                columns[index++] = resourcesValue;
+            }
+        }
+        if (highestY < lowestY) {
+            // Nothing to do anywhere in this chunk, which counts as having rendered it
+            return true;
+        }
+        final int depth = highestY - lowestY + 1;
+        if ((COLUMN_COUNT * depth) < GpuSettings.getMinimumBatchSize()) {
+            // Too little work to be worth the round trip to the device
+            return false;
+        }
+        final byte[] volume = gpuKernel.generate(columns, COLUMN_COUNT, lowestY, depth);
+        if (volume == null) {
+            return false;
+        }
+        int columnIndex = 0;
+        for (int x = 0; x < 16; x++) {
+            for (int z = 0; z < 16; z++, columnIndex++) {
+                final int columnBase = columnIndex * ResourceLayerKernel.COLUMN_STRIDE;
+                final int columnMinZ = columns[columnBase + 2], columnMaxZ = columns[columnBase + 3];
+                final int volumeBase = columnIndex * depth;
+                for (int y = columnMaxZ; y >= columnMinZ; y--) {
+                    final byte materialIndex = volume[volumeBase + y - lowestY];
+                    if (materialIndex != ResourceLayerKernel.NONE) {
+                        place(chunk, x, y, z, activeMaterials[materialIndex & 0xff], nether);
+                    }
+                }
+            }
+        }
+        return true;
+    }
+
     private final Material[] activeMaterials;
     private final PerlinNoise[] noiseGenerators;
     private final int[] minLevels, maxLevels;
     private final float[][] chances;
+    private final boolean[] smallBlobScale;
+    private final ResourceLayerKernel gpuKernel;
+
+    /** The number of columns in a chunk. */
+    private static final int COLUMN_COUNT = 16 * 16;
 
     private static final Map<String, Material> ORE_TO_DEEPSLATE_VARIANT = ImmutableMap.of(
             MC_COAL_ORE, DEEPSLATE_COAL_ORE,

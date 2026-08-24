@@ -55,6 +55,19 @@
         <url>https://github.com/Captain-Chaos/WorldPainter</url>
     </scm>
 
+    <dependencyManagement>
+        <dependencies>
+            <!-- Aligns the LWJGL core artifact with all of its native binary artifacts. -->
+            <dependency>
+                <groupId>org.lwjgl</groupId>
+                <artifactId>lwjgl-bom</artifactId>
+                <version>${lwjgl.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
     <build>
         <plugins>
             <plugin>
@@ -121,6 +134,7 @@
         <dynmap-core.version>3.6</dynmap-core.version>
         <snakeyaml.version>2.0</snakeyaml.version>
         <json-simple.version>1.1.1</json-simple.version>
+        <lwjgl.version>3.3.3</lwjgl.version>
 
         <!-- GUI dependencies -->
         <jpen.version>2-150301</jpen.version>
@@ -133,7 +147,8 @@
         <junit.version>4.13.2</junit.version>
 
         <!-- Build dependencies -->
-        <lombok.version>1.18.22</lombok.version>
+        <!-- 1.18.22 does not support JDK 16+ compilers; 1.18.34 builds on JDK 8-22. -->
+        <lombok.version>1.18.34</lombok.version>
 
         <!-- Maven plugin versions -->
         <maven-enforcer-plugin.version>3.3.0</maven-enforcer-plugin.version>
