@@ -25,7 +25,7 @@ import java.util.Map;
  * happens to look like JSON does not pass. WorldPainter's core has no JSON library on its class path, and a parser
  * that only has to be correct, not fast, is short enough to keep in the tests.
  */
-final class MiniJson {
+public final class MiniJson {
     private MiniJson(String text) {
         this.text = text;
     }
@@ -36,7 +36,7 @@ final class MiniJson {
      * @return A {@link Map}, {@link List}, {@link String}, {@link Double}, {@link Boolean}, or {@code null}.
      * @throws IllegalArgumentException if the text is not valid JSON.
      */
-    static Object parse(String text) {
+    public static Object parse(String text) {
         final MiniJson parser = new MiniJson(text);
         parser.skipWhitespace();
         final Object value = parser.readValue();

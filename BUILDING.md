@@ -20,3 +20,31 @@ For a few pointers, pitfalls and gotchas about developing WorldPainter, see [thi
 
 ## More details
 For a more detailed description of the build process, see: https://www.worldpainter.net/doc/building.
+
+## Notes for this fork
+
+### JDK version
+The Maven toolchain is configured for JDK 17, as upstream. If you have only a newer JDK, you can register it as the
+version 17 toolchain in `~/.m2/toolchains.xml`; the compiler is invoked with `-source 17 -target 17` either way. Lombok
+was raised to 1.18.34 for this: 1.18.22, which upstream pins, cannot run on a JDK 16 or newer compiler.
+
+### Building only what is buildable
+`WPGUI` depends on the JIDE Docking Framework, JPen and a NetBeans look and feel, none of which are redistributable, and
+`WPDynmapPreviewer` depends on DynmapCore. Everything this fork adds is in `WPCore`, which needs nothing but Maven
+Central:
+
+```
+mvn -pl WPCore -am install -DskipTests
+mvn -pl WPCore test
+```
+
+### The command line jar
+```
+mvn -pl WPCore -am -P cli package -DskipTests
+java -jar WPCore/target/WPCore-<version>-jar-with-dependencies.jar help
+```
+
+### OpenCL and the tests
+The GPU tests skip themselves when there is no OpenCL runtime, so the suite is green on a machine without one. To run
+them on a machine with no graphics card, install a software OpenCL implementation — `pocl-opencl-icd` on Debian and
+Ubuntu — and they will pick it up. See [docs/GPU-ACCELERATION.md](docs/GPU-ACCELERATION.md).

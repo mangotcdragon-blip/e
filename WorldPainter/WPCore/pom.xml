@@ -128,6 +128,59 @@
         </dependency>
     </dependencies>
 
+    <profiles>
+        <!--
+            Builds a single runnable jar containing WPCore and everything it depends on, so that the command line can
+            be used without having to assemble a class path:
+
+                mvn -pl WPCore -am -P cli package -DskipTests
+                java -jar WPCore/target/WPCore-<version>-jar-with-dependencies.jar help
+
+            Off by default, because it is a large artifact and only the command line needs it.
+        -->
+        <profile>
+            <id>cli</id>
+            <dependencies>
+                <!-- A logging back end, so that the command line's jar does not start with an SLF4J warning. The
+                     command line turns it down to warnings unless it is run in verbose mode. -->
+                <dependency>
+                    <groupId>org.slf4j</groupId>
+                    <artifactId>slf4j-simple</artifactId>
+                    <version>${slf4j.version}</version>
+                    <scope>runtime</scope>
+                </dependency>
+            </dependencies>
+            <build>
+                <plugins>
+                    <plugin>
+                        <artifactId>maven-assembly-plugin</artifactId>
+                        <version>3.6.0</version>
+                        <configuration>
+                            <descriptorRefs>
+                                <descriptorRef>jar-with-dependencies</descriptorRef>
+                            </descriptorRefs>
+                            <archive>
+                                <manifest>
+                                    <mainClass>org.pepsoft.worldpainter.cli.WorldPainterCli</mainClass>
+                                </manifest>
+                            </archive>
+                            <appendAssemblyId>true</appendAssemblyId>
+                        </configuration>
+                        <executions>
+                            <execution>
+                                <id>cli-jar</id>
+                                <phase>package</phase>
+                                <goals>
+                                    <goal>single</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
+
     <build>
         <resources>
             <resource>

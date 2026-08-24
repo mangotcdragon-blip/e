@@ -25,7 +25,6 @@ import org.pepsoft.worldpainter.layers.exporters.ResourcesExporter;
 import org.pepsoft.worldpainter.layers.exporters.ResourcesExporter.ResourcesExporterSettings;
 import org.pepsoft.worldpainter.plugins.BlockBasedPlatformProvider;
 import org.pepsoft.worldpainter.plugins.PlatformManager;
-import org.pepsoft.worldpainter.plugins.WPPluginManager;
 
 import java.awt.Rectangle;
 
@@ -46,7 +45,7 @@ import static org.pepsoft.worldpainter.DefaultPlugin.JAVA_ANVIL_1_18;
 public class ResourcesExporterAccelerationTest {
     @BeforeClass
     public static void initialisePlugins() {
-        WPPluginManager.initialise(null, WPContext.INSTANCE);
+        TestPlugins.ensureInitialised();
     }
 
     @After
@@ -78,8 +77,11 @@ public class ResourcesExporterAccelerationTest {
 
         GpuSettings.setMode(GpuSettings.Mode.AUTO);
         GpuSettings.setDevicePreference(GpuSettings.DevicePreference.ANY_DEVICE);
+        final long dispatchesBefore = ResourceLayerKernel.getDispatchCount();
         final ResourcesExporter gpuExporter = new ResourcesExporter(dimension, JAVA_ANVIL_1_18, settings);
         gpuExporter.render(tile, accelerated);
+        assertTrue("this test is meaningless unless the chunk actually went to the GPU",
+                ResourceLayerKernel.getDispatchCount() > dispatchesBefore);
 
         GpuSettings.setMode(GpuSettings.Mode.OFF);
         final ResourcesExporter cpuExporter = new ResourcesExporter(dimension, JAVA_ANVIL_1_18, settings);

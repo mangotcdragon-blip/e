@@ -19,6 +19,9 @@ import org.pepsoft.util.SystemUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.OutputStream;
+import java.io.PrintStream;
+
 /**
  * Finds and loads the system's OpenCL ICD loader.
  *
@@ -51,15 +54,28 @@ final class OpenCLLoader {
             loaded = true;
             return true;
         }
-        for (String candidate: getCandidateNames()) {
-            try {
-                Library.loadNative(OpenCLLoader.class, "org.lwjgl.opencl", candidate);
-                Configuration.OPENCL_LIBRARY_NAME.set(candidate);
-                logger.debug("Loaded OpenCL ICD loader \"{}\"", candidate);
-                loaded = true;
-                return true;
-            } catch (Throwable t) {
-                logger.debug("OpenCL ICD loader \"{}\" not available ({})", candidate, t.getMessage());
+        // LWJGL prints a multi-line complaint to its debug stream every time a library fails to load. That is a
+        // normal outcome here - the whole point is to try several names - so send it somewhere else while probing,
+        // and let the outcome be reported once, at debug level, below.
+        final Object originalDebugStream = Configuration.DEBUG_STREAM.get();
+        Configuration.DEBUG_STREAM.set(SILENCE);
+        try {
+            for (String candidate: getCandidateNames()) {
+                try {
+                    Library.loadNative(OpenCLLoader.class, "org.lwjgl.opencl", candidate);
+                    Configuration.OPENCL_LIBRARY_NAME.set(candidate);
+                    logger.debug("Loaded OpenCL ICD loader \"{}\"", candidate);
+                    loaded = true;
+                    return true;
+                } catch (Throwable t) {
+                    logger.debug("OpenCL ICD loader \"{}\" not available ({})", candidate, t.getMessage());
+                }
+            }
+        } finally {
+            if (originalDebugStream != null) {
+                Configuration.DEBUG_STREAM.set(originalDebugStream);
+            } else {
+                Configuration.DEBUG_STREAM.set(System.err);
             }
         }
         logger.debug("No OpenCL ICD loader found; GPU acceleration is not available on this machine");
@@ -81,6 +97,9 @@ final class OpenCLLoader {
     }
 
     private static Boolean loaded;
+
+    /** Swallows LWJGL's diagnostics while candidate library names are being tried. */
+    private static final PrintStream SILENCE = new PrintStream(OutputStream.nullOutputStream(), false);
 
     private static final Logger logger = LoggerFactory.getLogger(OpenCLLoader.class);
 }

@@ -22,6 +22,7 @@ import java.nio.IntBuffer;
 import java.nio.ShortBuffer;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.atomic.AtomicLong;
 
 import static org.lwjgl.opencl.CL10.*;
 import static org.lwjgl.system.MemoryUtil.memAllocShort;
@@ -144,6 +145,7 @@ public final class StoneMixKernel {
                         "clEnqueueNDRangeKernel(wp_stone_mix)");
             }
 
+            DISPATCHES.incrementAndGet();
             final ByteBuffer hostResult = scratch.getHostResult();
             hostResult.limit(blockCount);
             CLErrors.check(clEnqueueReadBuffer(queue, scratch.getDeviceResult(), true, 0, hostResult, null, null),
@@ -158,6 +160,15 @@ public final class StoneMixKernel {
             GpuContext.disable("the Stone Mix kernel failed unexpectedly", t);
             return null;
         }
+    }
+
+    /**
+     * How many chunks this kernel has generated since the process started. Diagnostic: it is the difference between
+     * "the GPU is being used" and "the GPU was available but every chunk fell back to the CPU", which is otherwise
+     * invisible because both produce the same map.
+     */
+    public static long getDispatchCount() {
+        return DISPATCHES.get();
     }
 
     private ChunkScratch getScratch() {
@@ -211,6 +222,8 @@ public final class StoneMixKernel {
     static final float GRANITE_CHANCE  = PerlinNoise.getLevelForPromillage(45);
     static final float DIORITE_CHANCE  = PerlinNoise.getLevelForPromillage(45);
     static final float ANDESITE_CHANCE = PerlinNoise.getLevelForPromillage(45);
+
+    private static final AtomicLong DISPATCHES = new AtomicLong();
 
     private static final int WORK_GROUP_SIZE = 64;
     private static final byte[] EMPTY = new byte[0];

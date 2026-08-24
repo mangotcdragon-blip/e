@@ -22,9 +22,8 @@ import org.pepsoft.minecraft.Material;
 import org.pepsoft.worldpainter.Dimension;
 import org.pepsoft.worldpainter.TestData;
 import org.pepsoft.worldpainter.Terrain;
-import org.pepsoft.worldpainter.WPContext;
+import org.pepsoft.worldpainter.TestPlugins;
 import org.pepsoft.worldpainter.exporting.WorldPainterChunkFactory;
-import org.pepsoft.worldpainter.plugins.WPPluginManager;
 
 import java.awt.Rectangle;
 
@@ -44,7 +43,7 @@ import static org.pepsoft.worldpainter.DefaultPlugin.JAVA_ANVIL_1_18;
 public class SubsurfaceAccelerationTest {
     @BeforeClass
     public static void initialisePlugins() {
-        WPPluginManager.initialise(null, WPContext.INSTANCE);
+        TestPlugins.ensureInitialised();
     }
 
     @After
@@ -61,7 +60,10 @@ public class SubsurfaceAccelerationTest {
 
         GpuSettings.setMode(GpuSettings.Mode.AUTO);
         GpuSettings.setDevicePreference(GpuSettings.DevicePreference.ANY_DEVICE);
+        final long dispatchesBefore = StoneMixKernel.getDispatchCount();
         final Chunk accelerated = createChunk(dimension);
+        assertTrue("this test is meaningless unless the chunk actually went to the GPU",
+                StoneMixKernel.getDispatchCount() > dispatchesBefore);
 
         GpuSettings.setMode(GpuSettings.Mode.OFF);
         final Chunk unaccelerated = createChunk(dimension);
