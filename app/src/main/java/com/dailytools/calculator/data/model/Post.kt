@@ -6,7 +6,10 @@ data class Post(
     val id: String,
     val source: Source,
     val previewUrl: String,
+    /** The original full-quality file - used for downloads/shares, where quality should never be reduced. */
     val fileUrl: String,
+    /** What the viewer actually streams/displays: a lighter "sample" encode when the site has one, else [fileUrl]. */
+    val viewUrl: String,
     val width: Int,
     val height: Int,
     val tags: List<String>,

@@ -97,11 +97,13 @@ class BooruRepository {
     private fun E621Post.toPost(): Post? {
         val url = file?.url ?: sample?.url ?: return null
         val preview = preview?.url ?: sample?.url ?: url
+        val viewUrl = sample?.takeIf { it.has == true && !it.url.isNullOrBlank() }?.url ?: url
         return Post(
             id = "e621_$id",
             source = Source.E621,
             previewUrl = preview,
             fileUrl = url,
+            viewUrl = viewUrl,
             width = file?.width ?: 0,
             height = file?.height ?: 0,
             tags = tags?.flatten().orEmpty(),
@@ -114,11 +116,15 @@ class BooruRepository {
     private fun Rule34Post.toPost(): Post? {
         val url = file_url ?: sample_url ?: return null
         val preview = preview_url ?: sample_url ?: url
+        // Rule34's dapi has no "is this actually a lighter encode" flag, so just prefer
+        // sample_url whenever it differs from the original file.
+        val viewUrl = sample_url?.takeIf { it.isNotBlank() && it != url } ?: url
         return Post(
             id = "r34_$id",
             source = Source.RULE34,
             previewUrl = preview,
             fileUrl = url,
+            viewUrl = viewUrl,
             width = width ?: 0,
             height = height ?: 0,
             tags = tags.orEmpty().split(" ").filter { it.isNotBlank() },

@@ -70,5 +70,8 @@ data class E621Preview(
 )
 
 data class E621Sample(
-    val url: String?
+    val has: Boolean?,
+    val url: String?,
+    val width: Int?,
+    val height: Int?,
 )

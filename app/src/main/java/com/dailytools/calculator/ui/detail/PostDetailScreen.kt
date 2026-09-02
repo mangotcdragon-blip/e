@@ -126,9 +126,9 @@ fun PostDetailScreen(
             ) { page ->
                 val post = posts[page]
                 when (post.mediaKind) {
-                    MediaKind.VIDEO -> VideoPlayerView(url = post.fileUrl, modifier = Modifier.fillMaxSize())
+                    MediaKind.VIDEO -> VideoPlayerView(url = post.viewUrl, modifier = Modifier.fillMaxSize())
                     else -> ZoomableImage(
-                        model = post.fileUrl,
+                        model = post.viewUrl,
                         contentDescription = null,
                         modifier = Modifier.fillMaxSize(),
                     )
