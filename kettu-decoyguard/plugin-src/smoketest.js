@@ -13,9 +13,10 @@ function makeReactMock() {
     };
 }
 
-function makeVendetta({ storesAvailable, messageActionsAvailable }) {
+function makeVendetta({ storesAvailable, messageActionsAvailable, dispatcherHasSetter = false }) {
     const interceptorHolder = {};
     const dispatched = [];
+    const applied = [];
 
     const stores = {
         ChannelStore: { getChannel: (id) => ({ type: 1, recipients: ["999"] }) },
@@ -76,17 +77,31 @@ function makeVendetta({ storesAvailable, messageActionsAvailable }) {
                         },
                     },
                 },
-                FluxDispatcher: {
-                    _interceptors: [],
-                    dispatch: (action) => {
-                        dispatched.push(action);
-                        if (interceptorHolder.fn) {
-                            const blocked = interceptorHolder.fn(action);
-                            if (blocked) return;
-                        }
+                FluxDispatcher: dispatcherHasSetter
+                    ? {
+                        _interceptors: [],
+                        dispatch: (action) => {
+                            dispatched.push(action);
+                            if (interceptorHolder.fn) {
+                                const blocked = interceptorHolder.fn(action);
+                                if (blocked) return;
+                            }
+                        },
+                        setInterceptor: (fn) => { interceptorHolder.fn = fn; },
+                    }
+                    : {
+                        // Matches the real device: no setInterceptor method at
+                        // all, just a plain array that dispatch() runs
+                        // through, stopping at the first truthy return.
+                        _interceptors: [],
+                        dispatch(action) {
+                            dispatched.push(action);
+                            for (const fn of this._interceptors) {
+                                if (fn(action)) return; // blocked - never "applied"
+                            }
+                            applied.push(action); // reached stores
+                        },
                     },
-                    setInterceptor: (fn) => { interceptorHolder.fn = fn; },
-                },
                 moment: (ms) => ({ valueOf: () => ms }),
             },
         },
@@ -99,7 +114,7 @@ function makeVendetta({ storesAvailable, messageActionsAvailable }) {
         ui: { components: {}, alerts: { showInputAlert: () => {} } },
     };
 
-    return { vendetta, stores, messageActions, dispatched };
+    return { vendetta, stores, messageActions, dispatched, applied };
 }
 
 function evalPluginLike(vendetta) {
@@ -112,7 +127,7 @@ function evalPluginLike(vendetta) {
 
 console.log("=== Scenario 1: everything available (happy path) ===");
 {
-    const { vendetta, stores, messageActions, dispatched } = makeVendetta({ storesAvailable: true, messageActionsAvailable: true });
+    const { vendetta, stores, messageActions, dispatched, applied } = makeVendetta({ storesAvailable: true, messageActionsAvailable: true });
     const evaled = evalPluginLike(vendetta);
 
     if (typeof evaled.onLoad !== "function") throw new Error("onLoad missing");
@@ -135,6 +150,14 @@ console.log("=== Scenario 1: everything available (happy path) ===");
     const filtered = stores.PrivateChannelSortStore.getPrivateChannelIds();
     if (JSON.stringify(filtered) !== JSON.stringify(["111"])) throw new Error("configured+locked should filter to decoy ids only, got " + JSON.stringify(filtered));
     if (!dispatched.some(a => a.type === "MESSAGE_CREATE")) throw new Error("expected fake messages to be dispatched");
+    if (!applied.some(a => a.type === "MESSAGE_CREATE")) throw new Error("our own fake MESSAGE_CREATE dispatches should reach the stores (FAKE_MARKER lets them through)");
+
+    console.log("  testing real-time blocking via the array-based interceptor (the actual fix for this device)...");
+    const appliedCountBefore = applied.length;
+    vendetta.metro.common.FluxDispatcher.dispatch({ type: "MESSAGE_CREATE", channelId: "222", message: { channel_id: "222", content: "real incoming text on a HIDDEN channel" } });
+    vendetta.metro.common.FluxDispatcher.dispatch({ type: "MESSAGE_CREATE", channelId: "111", message: { channel_id: "111", content: "real incoming text on the DECOY channel itself" } });
+    if (applied.length !== appliedCountBefore) throw new Error("real-time messages on private channels should be blocked while locked, but " + (applied.length - appliedCountBefore) + " got through");
+    console.log("  confirmed: real-time DM traffic is blocked while locked via direct _interceptors array push");
 
     const sendResult = messageActions.sendMessage("111", { content: "banana bread recipe" });
     if (!(sendResult instanceof Promise)) throw new Error("unlock phrase should have been intercepted (promise), got " + JSON.stringify(sendResult));

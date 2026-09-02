@@ -193,6 +193,7 @@
     }
     let previousInterceptor;
     let interceptorInstalled = false;
+    let interceptorMode = null;
     const BLOCKABLE_ACTIONS = /* @__PURE__ */ new Set([
       "MESSAGE_CREATE",
       "MESSAGE_UPDATE",
@@ -203,27 +204,52 @@
       "CHANNEL_PINS_UPDATE",
       "TYPING_START"
     ]);
-    function myInterceptor(action) {
+    function shouldBlock(action) {
       if (locked && isConfigured() && !action?.[FAKE_MARKER] && BLOCKABLE_ACTIONS.has(action?.type)) {
         const channelId = action.channelId ?? action.message?.channel_id;
         if (channelId && isPrivateChannel(channelId))
           return true;
       }
+      return false;
+    }
+    function myInterceptorChained(action) {
+      if (shouldBlock(action))
+        return true;
       return previousInterceptor?.(action);
+    }
+    function myInterceptorArrayEntry(action) {
+      return shouldBlock(action) || void 0;
     }
     function installInterceptor() {
       if (interceptorInstalled)
         return;
-      previousInterceptor = FluxDispatcher._interceptors?.[0];
-      FluxDispatcher.setInterceptor(myInterceptor);
+      if (typeof FluxDispatcher.setInterceptor === "function") {
+        previousInterceptor = FluxDispatcher._interceptors?.[0];
+        FluxDispatcher.setInterceptor(myInterceptorChained);
+        interceptorMode = "setter";
+        interceptorInstalled = true;
+        return;
+      }
+      if (!Array.isArray(FluxDispatcher._interceptors)) {
+        FluxDispatcher._interceptors = [];
+      }
+      FluxDispatcher._interceptors.push(myInterceptorArrayEntry);
+      interceptorMode = "array";
       interceptorInstalled = true;
     }
     function restoreInterceptor() {
       if (!interceptorInstalled)
         return;
-      FluxDispatcher.setInterceptor(previousInterceptor);
+      if (interceptorMode === "setter") {
+        FluxDispatcher.setInterceptor(previousInterceptor);
+        previousInterceptor = void 0;
+      } else if (interceptorMode === "array") {
+        const idx = FluxDispatcher._interceptors?.indexOf(myInterceptorArrayEntry) ?? -1;
+        if (idx > -1)
+          FluxDispatcher._interceptors.splice(idx, 1);
+      }
+      interceptorMode = null;
       interceptorInstalled = false;
-      previousInterceptor = void 0;
     }
     let unpatchList = () => {
     };

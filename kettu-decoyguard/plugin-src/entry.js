@@ -198,10 +198,18 @@ function start() {
         });
     }
 
-    // FluxDispatcher only has ONE global interceptor slot - chain through
-    // whatever was set before us instead of clobbering it.
+    // Two known shapes for Discord's dispatcher interceptor across builds:
+    // (a) a single setInterceptor(fn) slot that replaces whatever was set
+    //     before (needs manual chaining through the previous fn), or
+    //     confirmed NOT present on this build (setInterceptor is undefined);
+    // (b) a plain `_interceptors` array that every dispatch() call runs
+    //     through - confirmed present here (FluxDispatcher.dispatch() already
+    //     works elsewhere in this plugin without throwing). We push/splice
+    //     directly into that array, which needs no chaining since it's
+    //     already a list.
     let previousInterceptor;
     let interceptorInstalled = false;
+    let interceptorMode = null; // "setter" | "array"
 
     const BLOCKABLE_ACTIONS = new Set([
         "MESSAGE_CREATE",
@@ -214,26 +222,59 @@ function start() {
         "TYPING_START",
     ]);
 
-    function myInterceptor(action) {
+    function shouldBlock(action) {
         if (locked && isConfigured() && !action?.[FAKE_MARKER] && BLOCKABLE_ACTIONS.has(action?.type)) {
             const channelId = action.channelId ?? action.message?.channel_id;
             if (channelId && isPrivateChannel(channelId)) return true;
         }
+        return false;
+    }
+
+    // Used only in "setter" mode, where we own the single slot and must
+    // manually fall through to whatever was set before us.
+    function myInterceptorChained(action) {
+        if (shouldBlock(action)) return true;
         return previousInterceptor?.(action);
+    }
+
+    // Used only in "array" mode - other interceptors in the array run
+    // independently of us, we just add our own entry.
+    function myInterceptorArrayEntry(action) {
+        return shouldBlock(action) || undefined;
     }
 
     function installInterceptor() {
         if (interceptorInstalled) return;
-        previousInterceptor = FluxDispatcher._interceptors?.[0];
-        FluxDispatcher.setInterceptor(myInterceptor);
+
+        if (typeof FluxDispatcher.setInterceptor === "function") {
+            previousInterceptor = FluxDispatcher._interceptors?.[0];
+            FluxDispatcher.setInterceptor(myInterceptorChained);
+            interceptorMode = "setter";
+            interceptorInstalled = true;
+            return;
+        }
+
+        if (!Array.isArray(FluxDispatcher._interceptors)) {
+            FluxDispatcher._interceptors = [];
+        }
+        FluxDispatcher._interceptors.push(myInterceptorArrayEntry);
+        interceptorMode = "array";
         interceptorInstalled = true;
     }
 
     function restoreInterceptor() {
         if (!interceptorInstalled) return;
-        FluxDispatcher.setInterceptor(previousInterceptor);
+
+        if (interceptorMode === "setter") {
+            FluxDispatcher.setInterceptor(previousInterceptor);
+            previousInterceptor = undefined;
+        } else if (interceptorMode === "array") {
+            const idx = FluxDispatcher._interceptors?.indexOf(myInterceptorArrayEntry) ?? -1;
+            if (idx > -1) FluxDispatcher._interceptors.splice(idx, 1);
+        }
+
+        interceptorMode = null;
         interceptorInstalled = false;
-        previousInterceptor = undefined;
     }
 
     let unpatchList = () => {};
