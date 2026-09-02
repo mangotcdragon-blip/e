@@ -94,43 +94,56 @@ class BooruRepository {
         return response.orEmpty().mapNotNull { it.toPost() }
     }
 
+    /**
+     * Only accept a "lighter" candidate URL if it's actually the same kind of media as the
+     * original - sites commonly point their sample/preview field at a static JPEG frame for
+     * video posts, which would otherwise get handed to the video player as if it were the video.
+     */
+    private fun pickViewUrl(originalUrl: String, mediaKind: MediaKind, candidate: String?): String {
+        if (candidate.isNullOrBlank()) return originalUrl
+        return if (Post.mediaKindFor(candidate) == mediaKind) candidate else originalUrl
+    }
+
     private fun E621Post.toPost(): Post? {
         val url = file?.url ?: sample?.url ?: return null
         val preview = preview?.url ?: sample?.url ?: url
-        val viewUrl = sample?.takeIf { it.has == true && !it.url.isNullOrBlank() }?.url ?: url
+        val mediaKind = Post.mediaKindFor(url)
+        val sampleCandidate = sample?.takeIf { it.has == true }?.url
         return Post(
             id = "e621_$id",
             source = Source.E621,
             previewUrl = preview,
             fileUrl = url,
-            viewUrl = viewUrl,
+            viewUrl = pickViewUrl(url, mediaKind, sampleCandidate),
             width = file?.width ?: 0,
             height = file?.height ?: 0,
             tags = tags?.flatten().orEmpty(),
             ratingLabel = rating.orEmpty(),
             score = score?.total ?: 0,
-            mediaKind = Post.mediaKindFor(url),
+            mediaKind = mediaKind,
         )
     }
 
     private fun Rule34Post.toPost(): Post? {
         val url = file_url ?: sample_url ?: return null
         val preview = preview_url ?: sample_url ?: url
+        val mediaKind = Post.mediaKindFor(url)
         // Rule34's dapi has no "is this actually a lighter encode" flag, so just prefer
-        // sample_url whenever it differs from the original file.
-        val viewUrl = sample_url?.takeIf { it.isNotBlank() && it != url } ?: url
+        // sample_url whenever it differs from the original file (pickViewUrl still guards
+        // against it being a still-frame JPEG for a video post).
+        val sampleCandidate = sample_url?.takeIf { it != url }
         return Post(
             id = "r34_$id",
             source = Source.RULE34,
             previewUrl = preview,
             fileUrl = url,
-            viewUrl = viewUrl,
+            viewUrl = pickViewUrl(url, mediaKind, sampleCandidate),
             width = width ?: 0,
             height = height ?: 0,
             tags = tags.orEmpty().split(" ").filter { it.isNotBlank() },
             ratingLabel = rating.orEmpty(),
             score = score ?: 0,
-            mediaKind = Post.mediaKindFor(url),
+            mediaKind = mediaKind,
         )
     }
 }
