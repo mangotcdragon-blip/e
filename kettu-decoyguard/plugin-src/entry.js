@@ -107,6 +107,35 @@ function start() {
         }
     }
 
+    function getSelectedChannelId() {
+        try {
+            const SelectedChannelStore = findStore("SelectedChannelStore");
+            return SelectedChannelStore?.getChannelId?.() ?? null;
+        } catch {
+            return null;
+        }
+    }
+
+    // Best-effort human label for a channel id, for the "add channel" UI -
+    // never throws, just returns { exists, label }.
+    function describeChannel(id) {
+        try {
+            const ChannelStore = findStore("ChannelStore");
+            const c = ChannelStore?.getChannel(id);
+            if (!c) return { exists: false, label: null };
+            if (c.type === 1) {
+                const other = otherRecipient(id);
+                return { exists: true, label: other?.username ? `DM with ${other.username}` : `DM (${id})` };
+            }
+            if (c.type === 3) {
+                return { exists: true, label: c.name ? `Group: ${c.name}` : `Group DM (${id})` };
+            }
+            return { exists: false, label: null };
+        } catch {
+            return { exists: false, label: null };
+        }
+    }
+
     function clearChannelMessages(id) {
         try {
             FluxDispatcher.dispatch({
@@ -344,6 +373,65 @@ function start() {
         return React.createElement(Text, { style: { color: "#999", fontSize: 12, fontWeight: "bold", marginTop: 20, marginBottom: 6, textTransform: "uppercase" } }, children);
     }
 
+    function Button({ label, onPress, danger }) {
+        return React.createElement(
+            TouchableOpacity,
+            { onPress, style: { backgroundColor: danger ? "#3a1f1f" : "#2b2d31", borderRadius: 4, paddingVertical: 8, paddingHorizontal: 12, marginTop: 6, alignSelf: "flex-start" } },
+            React.createElement(Text, { style: { color: danger ? "#f04747" : "white", fontSize: 13 } }, label),
+        );
+    }
+
+    function ChannelCard({ id, config, expanded, onToggleExpand, onRemove, onAddMessage, onRemoveMessage }) {
+        const [msgText, setMsgText] = React.useState("");
+        const [fromMe, setFromMe] = React.useState(true);
+        const desc = describeChannel(id);
+
+        return React.createElement(
+            View,
+            { style: { borderWidth: 1, borderColor: "#333", borderRadius: 6, padding: 10, marginBottom: 8 } },
+            React.createElement(
+                TouchableOpacity,
+                { onPress: onToggleExpand },
+                React.createElement(Text, { style: { color: "white", fontSize: 14, fontWeight: "bold" } }, config.label || desc.label || id),
+                React.createElement(Text, { style: { color: desc.exists ? "#999" : "#f04747", fontSize: 11, marginTop: 2 } },
+                    desc.exists ? `${config.messages.length} message(s) - tap to ${expanded ? "collapse" : "edit"}` : "Couldn't resolve this channel ID anymore - it may be wrong, or you're not in that DM"),
+            ),
+            expanded && React.createElement(
+                View,
+                { style: { marginTop: 10 } },
+                ...config.messages.map((m, i) =>
+                    React.createElement(
+                        View,
+                        { key: i, style: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: 4 } },
+                        React.createElement(Text, { style: { color: "white", fontSize: 12, flex: 1 } }, `${m.fromMe ? "[You] " : "[Them] "}${m.text}`),
+                        React.createElement(TouchableOpacity, { onPress: () => onRemoveMessage(i) }, React.createElement(Text, { style: { color: "#f04747", fontSize: 12, paddingHorizontal: 8 } }, "remove")),
+                    ),
+                ),
+                React.createElement(TextInput, {
+                    value: msgText,
+                    onChangeText: setMsgText,
+                    placeholder: "message text",
+                    placeholderTextColor: "#666",
+                    style: { color: "white", borderWidth: 1, borderColor: "#555", borderRadius: 4, padding: 8, marginTop: 8 },
+                }),
+                React.createElement(
+                    TouchableOpacity,
+                    { onPress: () => setFromMe(v => !v), style: { marginTop: 6 } },
+                    React.createElement(Text, { style: { color: "#5865f2", fontSize: 12 } }, fromMe ? "Sent by: you (tap to switch)" : "Sent by: them (tap to switch)"),
+                ),
+                React.createElement(Button, {
+                    label: "Add message",
+                    onPress: () => {
+                        if (!msgText.trim()) return;
+                        onAddMessage(msgText.trim(), fromMe);
+                        setMsgText("");
+                    },
+                }),
+                React.createElement(Button, { label: "Remove this channel", danger: true, onPress: onRemove }),
+            ),
+        );
+    }
+
     function Settings() {
         const [, forceUpdate] = React.useReducer(n => n + 1, 0);
         React.useEffect(() => {
@@ -355,12 +443,17 @@ function start() {
         const [json, setJson] = React.useState(() => JSON.stringify(store.channels, null, 2));
         const [jsonError, setJsonError] = React.useState("");
         const [phrase, setPhrase] = React.useState(store.unlockPhrase);
+        const [showAdvanced, setShowAdvanced] = React.useState(false);
+        const [expandedId, setExpandedId] = React.useState(null);
+        const [manualId, setManualId] = React.useState("");
+        const [addError, setAddError] = React.useState("");
 
         function saveJson() {
             try {
                 store.channels = JSON.parse(json);
                 setJsonError("");
                 if (locked) lockDecoyChannels();
+                forceUpdate();
             } catch (e) {
                 setJsonError("Invalid JSON: " + e.message);
             }
@@ -371,6 +464,48 @@ function start() {
             if (!trimmed) return;
             store.unlockPhrase = trimmed;
             forceUpdate();
+        }
+
+        function afterChannelsChanged() {
+            setJson(JSON.stringify(store.channels, null, 2));
+            if (locked) lockDecoyChannels();
+            forceUpdate();
+        }
+
+        function addChannel(id) {
+            setAddError("");
+            if (!id) {
+                setAddError("Couldn't detect a chat - open the DM you want first (just tap into it, no need to send anything), then come back here and try again. Or paste a channel ID below.");
+                return;
+            }
+            if (store.channels[id]) {
+                setAddError("That chat is already in your decoy list.");
+                return;
+            }
+            const desc = describeChannel(id);
+            if (!desc.exists) {
+                setAddError("That doesn't look like a DM/group channel Discord recognizes right now.");
+                return;
+            }
+            store.channels[id] = { label: desc.label, messages: [] };
+            setExpandedId(id);
+            afterChannelsChanged();
+        }
+
+        function removeChannel(id) {
+            delete store.channels[id];
+            if (expandedId === id) setExpandedId(null);
+            afterChannelsChanged();
+        }
+
+        function addMessage(id, text, fromMe) {
+            store.channels[id].messages.push({ fromMe, text });
+            afterChannelsChanged();
+        }
+
+        function removeMessage(id, index) {
+            store.channels[id].messages.splice(index, 1);
+            afterChannelsChanged();
         }
 
         const anyFailed = diagnostics.some(d => !d.ok);
@@ -425,20 +560,67 @@ function start() {
             }),
             React.createElement(Row, { label: "Save phrase", onPress: savePhrase }),
 
-            React.createElement(SectionTitle, null, "Decoy channels (raw JSON)"),
+            React.createElement(SectionTitle, null, "Decoy channels"),
             React.createElement(Text, { style: { color: "#999", fontSize: 12, marginBottom: 8 } },
-                'Format: {"CHANNEL_ID": {"label": "your reference only", "messages": [{"fromMe": true, "text": "..."}, {"fromMe": false, "text": "..."}]}}',
+                "Open the DM you want to use as a decoy (just tap into it), then come back to this screen and tap the button below. Do this for each of your ~10 decoy chats.",
             ),
-            React.createElement(TextInput, {
-                value: json,
-                onChangeText: setJson,
-                placeholder: "{}",
-                placeholderTextColor: "#666",
-                multiline: true,
-                style: { minHeight: 220, color: "white", textAlignVertical: "top", padding: 8, borderWidth: 1, borderColor: "#555", borderRadius: 4, marginBottom: 8 },
-            }),
-            jsonError ? React.createElement(Text, { style: { color: "#f04747", marginBottom: 8 } }, jsonError) : null,
-            React.createElement(Row, { label: "Save decoy config", onPress: saveJson }),
+            React.createElement(Button, { label: "+ Add current chat as decoy", onPress: () => addChannel(getSelectedChannelId()) }),
+
+            React.createElement(Text, { style: { color: "#999", fontSize: 12, marginTop: 14, marginBottom: 4 } }, "Didn't work? Paste a channel ID instead (Settings > General > enable Developer Mode, then long-press the chat > Copy ID):"),
+            React.createElement(
+                View,
+                { style: { flexDirection: "row", alignItems: "center" } },
+                React.createElement(TextInput, {
+                    value: manualId,
+                    onChangeText: setManualId,
+                    placeholder: "channel ID",
+                    placeholderTextColor: "#666",
+                    style: { color: "white", borderWidth: 1, borderColor: "#555", borderRadius: 4, padding: 8, flex: 1, marginRight: 8 },
+                }),
+                React.createElement(Button, { label: "Add", onPress: () => { addChannel(manualId.trim()); setManualId(""); } }),
+            ),
+            addError ? React.createElement(Text, { style: { color: "#f04747", marginTop: 6 } }, addError) : null,
+
+            React.createElement(View, { style: { marginTop: 16 } },
+                ...Object.keys(store.channels).map(id =>
+                    React.createElement(ChannelCard, {
+                        key: id,
+                        id,
+                        config: store.channels[id],
+                        expanded: expandedId === id,
+                        onToggleExpand: () => setExpandedId(expandedId === id ? null : id),
+                        onRemove: () => removeChannel(id),
+                        onAddMessage: (text, fromMe) => addMessage(id, text, fromMe),
+                        onRemoveMessage: (i) => removeMessage(id, i),
+                    }),
+                ),
+            ),
+            Object.keys(store.channels).length === 0
+                ? React.createElement(Text, { style: { color: "#666", fontSize: 12, marginTop: 8 } }, "No decoy channels added yet.")
+                : null,
+
+            React.createElement(
+                TouchableOpacity,
+                { onPress: () => setShowAdvanced(v => !v), style: { marginTop: 20 } },
+                React.createElement(Text, { style: { color: "#5865f2", fontSize: 12 } }, showAdvanced ? "Hide advanced JSON editor" : "Advanced: edit as raw JSON"),
+            ),
+            showAdvanced && React.createElement(
+                View,
+                { style: { marginTop: 8 } },
+                React.createElement(Text, { style: { color: "#999", fontSize: 12, marginBottom: 8 } },
+                    'Format: {"CHANNEL_ID": {"label": "your reference only", "messages": [{"fromMe": true, "text": "..."}, {"fromMe": false, "text": "..."}]}}. Overwrites everything above on save.',
+                ),
+                React.createElement(TextInput, {
+                    value: json,
+                    onChangeText: setJson,
+                    placeholder: "{}",
+                    placeholderTextColor: "#666",
+                    multiline: true,
+                    style: { minHeight: 220, color: "white", textAlignVertical: "top", padding: 8, borderWidth: 1, borderColor: "#555", borderRadius: 4, marginBottom: 8 },
+                }),
+                jsonError ? React.createElement(Text, { style: { color: "#f04747", marginBottom: 8 } }, jsonError) : null,
+                React.createElement(Row, { label: "Save decoy config (JSON)", onPress: saveJson }),
+            ),
         );
     }
 

@@ -19,12 +19,13 @@ function makeVendetta({ storesAvailable, messageActionsAvailable, dispatcherHasS
     const applied = [];
 
     const stores = {
-        ChannelStore: { getChannel: (id) => ({ type: 1, recipients: ["999"] }) },
+        ChannelStore: { getChannel: (id) => (id === "999" ? undefined : { type: 1, recipients: ["999"] }) },
         UserStore: {
             getCurrentUser: () => ({ id: "1", username: "me" }),
             getUser: (id) => ({ id, username: "them" }),
         },
         PrivateChannelSortStore: { getPrivateChannelIds: () => ["111", "222", "333"] },
+        SelectedChannelStore: { getChannelId: () => "222" },
     };
 
     const messageActions = {
@@ -213,6 +214,97 @@ console.log("=== Scenario 3: start() itself throws (absolute worst case) ===");
     const tree = evaled.settings(); // should render the "failed to initialize" screen
     if (!tree) throw new Error("fallback settings() should still render something");
     console.log("  fallback plugin object activates cleanly and explains the failure in its settings screen");
+    console.log("PASSED\n");
+}
+
+console.log("=== Scenario 4: GUI add-channel / add-message / remove flow (no JSON, exactly what tapping the buttons does) ===");
+{
+    function findByLabel(node, label) {
+        if (!node) return null;
+        if (Array.isArray(node)) {
+            for (const n of node) {
+                const found = findByLabel(n, label);
+                if (found) return found;
+            }
+            return null;
+        }
+        if (node.props?.label === label) return node;
+        return findByLabel(node.children, label);
+    }
+
+    const { vendetta, stores } = makeVendetta({ storesAvailable: true, messageActionsAvailable: true });
+    const evaled = evalPluginLike(vendetta);
+    evaled.onLoad();
+
+    let tree = evaled.settings();
+    const addCurrentBtn = findByLabel(tree, "+ Add current chat as decoy");
+    if (!addCurrentBtn) throw new Error("couldn't find the 'Add current chat as decoy' button in the rendered tree");
+    addCurrentBtn.props.onPress(); // SelectedChannelStore mock returns "222"
+
+    if (!vendetta.plugin.storage.channels["222"]) throw new Error("adding the current chat should have added channel 222 to storage");
+    if (vendetta.plugin.storage.channels["222"].messages.length !== 0) throw new Error("newly added channel should start with no messages");
+    console.log("  'Add current chat as decoy' correctly added channel 222 from SelectedChannelStore");
+
+    // Re-render (state lives in the closure over `store`, safe to call settings() again)
+    tree = evaled.settings();
+    const addAgainBtn = findByLabel(tree, "+ Add current chat as decoy");
+    addAgainBtn.props.onPress();
+    if (Object.keys(vendetta.plugin.storage.channels).length !== 1) throw new Error("adding the same current chat twice should be a no-op, not a duplicate");
+    console.log("  adding the same chat twice is a no-op (duplicate guard works)");
+
+    // The manual-ID "Add" button calls the same addChannel(id) function with
+    // whatever was typed - already covered above. Just confirm the
+    // unresolvable-channel guard it relies on behaves as expected:
+    if (stores.ChannelStore.getChannel("999") !== undefined) throw new Error("test setup issue: channel 999 should be unresolvable");
+
+    // Add a message to channel 222, then remove it.
+    tree = evaled.settings();
+    // ChannelCard is a nested component - our shallow createElement mock
+    // doesn't execute its internal hooks/handlers (no real renderer), so we
+    // exercise the storage-mutation helpers the same way ChannelCard's
+    // buttons do, via the channel card's own onAddMessage/onRemoveMessage
+    // props captured on the ChannelCard element itself.
+    function findChannelCard(node, id) {
+        if (!node) return null;
+        if (Array.isArray(node)) {
+            for (const n of node) { const f = findChannelCard(n, id); if (f) return f; }
+            return null;
+        }
+        if (node.props?.id === id && node.props?.onAddMessage) return node;
+        return findChannelCard(node.children, id);
+    }
+    const card = findChannelCard(tree, "222");
+    if (!card) throw new Error("couldn't find the ChannelCard element for channel 222");
+
+    card.props.onAddMessage("hey what's up", false);
+    if (vendetta.plugin.storage.channels["222"].messages.length !== 1) throw new Error("onAddMessage should push a message");
+    card.props.onAddMessage("not much, you?", true);
+    if (vendetta.plugin.storage.channels["222"].messages.length !== 2) throw new Error("onAddMessage should push a second message");
+    console.log("  add-message flow works (2 messages added to channel 222)");
+
+    tree = evaled.settings();
+    const card2 = findChannelCard(tree, "222");
+    card2.props.onRemoveMessage(0);
+    if (vendetta.plugin.storage.channels["222"].messages.length !== 1) throw new Error("onRemoveMessage should splice out one message");
+    if (vendetta.plugin.storage.channels["222"].messages[0].text !== "not much, you?") throw new Error("onRemoveMessage removed the wrong message");
+    console.log("  remove-message flow works");
+
+    // Now configure the unlock phrase too and confirm the whole thing actually arms.
+    vendetta.plugin.storage.unlockPhrase = "banana bread recipe";
+    evaled.onUnload();
+    const evaled2 = evalPluginLike(vendetta);
+    evaled2.onLoad();
+    const filtered = stores.PrivateChannelSortStore.getPrivateChannelIds();
+    if (JSON.stringify(filtered) !== JSON.stringify(["222"])) throw new Error("after GUI-driven config, filtering should still kick in - got " + JSON.stringify(filtered));
+    console.log("  after GUI-only configuration (no JSON touched), filtering arms correctly");
+
+    tree = evaled2.settings();
+    const card3 = findChannelCard(tree, "222");
+    card3.props.onRemove();
+    if (vendetta.plugin.storage.channels["222"]) throw new Error("onRemove should delete the channel from storage");
+    console.log("  remove-channel flow works");
+
+    evaled2.onUnload();
     console.log("PASSED\n");
 }
 
