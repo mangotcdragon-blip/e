@@ -32,7 +32,9 @@ fun VideoPlayerView(url: String, modifier: Modifier = Modifier) {
         factory = {
             PlayerView(context).apply {
                 player = exoPlayer
-                useController = true
+                // No visible controls in a doomscroll feed - a swipe should always page,
+                // never get eaten by the player's own tap-to-toggle-controls touch handling.
+                useController = false
             }
         },
     )
