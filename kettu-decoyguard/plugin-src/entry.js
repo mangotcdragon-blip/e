@@ -48,10 +48,30 @@ function start() {
     // Always starts locked - no "remember unlocked" persistence, on purpose.
     let locked = true;
     const listeners = new Set();
+
+    // Patching getPrivateChannelIds() changes what it RETURNS, but Discord's
+    // DM list only re-renders when the store it belongs to tells React
+    // something changed - it doesn't re-poll the getter on every frame. Set
+    // by patchPrivateChannelList() once the store is found; calling
+    // .emitChange() on it is what actually makes the list refresh after we
+    // lock/unlock or add/remove a decoy channel. Without this, the getter
+    // returns the right (filtered) data but the visible list never updates
+    // until something else happens to trigger a re-render - which looks
+    // exactly like "nothing changed".
+    let sortStoreRef = null;
+    function notifyChannelListChanged() {
+        try {
+            sortStoreRef?.emitChange?.();
+        } catch (e) {
+            logger.warn("[DecoyGuard] emitChange on PrivateChannelSortStore failed", e);
+        }
+    }
+
     function setLocked(v) {
         if (locked === v) return;
         locked = v;
         listeners.forEach(l => l());
+        notifyChannelListChanged();
     }
 
     function decoyIds() {
@@ -134,6 +154,74 @@ function start() {
         } catch {
             return { exists: false, label: null };
         }
+    }
+
+    // Generic, boring filler exchanges used to auto-fill a newly added decoy
+    // channel so there's SOMETHING there without having to type anything.
+    // Deterministically varied per channel id so your ~10 decoys don't all
+    // show the exact same conversation if flipped through quickly - but
+    // still just placeholders. Edit or replace them per-channel for realism
+    // (e.g. referencing things that actually make sense for that contact).
+    const PLACEHOLDER_EXCHANGES = [
+        [
+            { fromMe: false, text: "yo you doing anything this weekend" },
+            { fromMe: true, text: "not really, why what's up" },
+            { fromMe: false, text: "might just chill, no real plans yet" },
+        ],
+        [
+            { fromMe: true, text: "did you finish that thing for tmrw" },
+            { fromMe: false, text: "working on it now lol" },
+            { fromMe: true, text: "same, it's not too bad tho" },
+        ],
+        [
+            { fromMe: false, text: "did you see that game last night" },
+            { fromMe: true, text: "nah I missed it, was it good" },
+            { fromMe: false, text: "yeah pretty close game ngl" },
+        ],
+        [
+            { fromMe: true, text: "what do you wanna eat later" },
+            { fromMe: false, text: "idk, pizza maybe?" },
+            { fromMe: true, text: "bet, sounds good" },
+        ],
+        [
+            { fromMe: false, text: "omw, be there in like 10" },
+            { fromMe: true, text: "ok see you in a bit" },
+        ],
+        [
+            { fromMe: true, text: "lol did you see that video" },
+            { fromMe: false, text: "yes it was so dumb" },
+            { fromMe: true, text: "I couldn't stop laughing" },
+        ],
+        [
+            { fromMe: false, text: "can I borrow your charger later" },
+            { fromMe: true, text: "yeah for sure, I'll bring it" },
+            { fromMe: false, text: "appreciate it" },
+        ],
+        [
+            { fromMe: true, text: "how was your day" },
+            { fromMe: false, text: "pretty good, kinda tired tho" },
+            { fromMe: true, text: "same here honestly" },
+        ],
+        [
+            { fromMe: false, text: "you still coming over later?" },
+            { fromMe: true, text: "yeah should be good, on schedule" },
+        ],
+        [
+            { fromMe: true, text: "what do you have first tmrw" },
+            { fromMe: false, text: "think it's just a free period" },
+            { fromMe: true, text: "lucky, I have a test first thing" },
+        ],
+    ];
+
+    function hashString(s) {
+        let h = 0;
+        for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+        return h;
+    }
+
+    function generatePlaceholderMessages(id) {
+        const idx = hashString(String(id)) % PLACEHOLDER_EXCHANGES.length;
+        return PLACEHOLDER_EXCHANGES[idx].map(m => ({ ...m })); // clone, don't share references
     }
 
     function clearChannelMessages(id) {
@@ -315,6 +403,7 @@ function start() {
         if (!PrivateChannelSortStore || typeof PrivateChannelSortStore.getPrivateChannelIds !== "function") {
             throw new Error("PrivateChannelSortStore.getPrivateChannelIds not found in this build");
         }
+        sortStoreRef = PrivateChannelSortStore;
         unpatchList = patcher.after("getPrivateChannelIds", PrivateChannelSortStore, (_args, ret) => {
             if (!locked || !isConfigured() || !Array.isArray(ret)) return ret;
             const allowed = new Set(decoyIds());
@@ -453,6 +542,7 @@ function start() {
                 store.channels = JSON.parse(json);
                 setJsonError("");
                 if (locked) lockDecoyChannels();
+                notifyChannelListChanged();
                 forceUpdate();
             } catch (e) {
                 setJsonError("Invalid JSON: " + e.message);
@@ -469,6 +559,7 @@ function start() {
         function afterChannelsChanged() {
             setJson(JSON.stringify(store.channels, null, 2));
             if (locked) lockDecoyChannels();
+            notifyChannelListChanged();
             forceUpdate();
         }
 
@@ -487,7 +578,7 @@ function start() {
                 setAddError("That doesn't look like a DM/group channel Discord recognizes right now.");
                 return;
             }
-            store.channels[id] = { label: desc.label, messages: [] };
+            store.channels[id] = { label: desc.label, messages: generatePlaceholderMessages(id) };
             setExpandedId(id);
             afterChannelsChanged();
         }
@@ -562,7 +653,7 @@ function start() {
 
             React.createElement(SectionTitle, null, "Decoy channels"),
             React.createElement(Text, { style: { color: "#999", fontSize: 12, marginBottom: 8 } },
-                "Open the DM you want to use as a decoy (just tap into it), then come back to this screen and tap the button below. Do this for each of your ~10 decoy chats.",
+                "Open the DM you want to use as a decoy (just tap into it), then come back to this screen and tap the button below. Do this for each of your ~10 decoy chats. Each one is auto-filled with a generic placeholder chat you can edit or replace below.",
             ),
             React.createElement(Button, { label: "+ Add current chat as decoy", onPress: () => addChannel(getSelectedChannelId()) }),
 
@@ -635,6 +726,7 @@ function start() {
                 safe("subscribe to AppState", () => {
                     appStateSub = AppState.addEventListener("change", onAppStateChange);
                 });
+                notifyChannelListChanged(); // in case it was already configured when enabled
             } catch (e) {
                 // Should be unreachable (every step above is wrapped by safe()),
                 // but if something still slips through, log it loudly instead
@@ -648,6 +740,7 @@ function start() {
             try { restoreInterceptor(); } catch (e) { logger.error("[DecoyGuard] restoreInterceptor failed", e); }
             try { appStateSub?.remove(); } catch {}
             appStateSub = null;
+            sortStoreRef = null;
         },
         settings: Settings,
     };

@@ -24,7 +24,11 @@ function makeVendetta({ storesAvailable, messageActionsAvailable, dispatcherHasS
             getCurrentUser: () => ({ id: "1", username: "me" }),
             getUser: (id) => ({ id, username: "them" }),
         },
-        PrivateChannelSortStore: { getPrivateChannelIds: () => ["111", "222", "333"] },
+        PrivateChannelSortStore: {
+            getPrivateChannelIds: () => ["111", "222", "333"],
+            emitChangeCount: 0,
+            emitChange() { this.emitChangeCount++; },
+        },
         SelectedChannelStore: { getChannelId: () => "222" },
     };
 
@@ -152,6 +156,8 @@ console.log("=== Scenario 1: everything available (happy path) ===");
     if (JSON.stringify(filtered) !== JSON.stringify(["111"])) throw new Error("configured+locked should filter to decoy ids only, got " + JSON.stringify(filtered));
     if (!dispatched.some(a => a.type === "MESSAGE_CREATE")) throw new Error("expected fake messages to be dispatched");
     if (!applied.some(a => a.type === "MESSAGE_CREATE")) throw new Error("our own fake MESSAGE_CREATE dispatches should reach the stores (FAKE_MARKER lets them through)");
+    if (stores.PrivateChannelSortStore.emitChangeCount < 1) throw new Error("onLoad (already configured) should call emitChange() so the DM list actually re-renders - this is the fix for 'nothing changed' on-device");
+    console.log(`  emitChange() called ${stores.PrivateChannelSortStore.emitChangeCount}x so far - confirms the DM list is actually told to refresh`);
 
     console.log("  testing real-time blocking via the array-based interceptor (the actual fix for this device)...");
     const appliedCountBefore = applied.length;
@@ -165,10 +171,13 @@ console.log("=== Scenario 1: everything available (happy path) ===");
 
     const unlockedIds = stores.PrivateChannelSortStore.getPrivateChannelIds();
     if (unlockedIds.length !== 3) throw new Error("after unlock, full DM list should be restored");
+    const emitCountAfterUnlock = stores.PrivateChannelSortStore.emitChangeCount;
+    if (emitCountAfterUnlock < 2) throw new Error("unlocking should also call emitChange() again to refresh the now-unfiltered list");
 
     vendetta.__appStateCb("background");
     const relockedIds = stores.PrivateChannelSortStore.getPrivateChannelIds();
     if (JSON.stringify(relockedIds) !== JSON.stringify(["111"])) throw new Error("backgrounding should auto re-lock and re-filter");
+    if (stores.PrivateChannelSortStore.emitChangeCount <= emitCountAfterUnlock) throw new Error("auto re-lock on backgrounding should also call emitChange()");
 
     evaled2.onUnload();
     const afterUnload = stores.PrivateChannelSortStore.getPrivateChannelIds();
@@ -242,8 +251,10 @@ console.log("=== Scenario 4: GUI add-channel / add-message / remove flow (no JSO
     addCurrentBtn.props.onPress(); // SelectedChannelStore mock returns "222"
 
     if (!vendetta.plugin.storage.channels["222"]) throw new Error("adding the current chat should have added channel 222 to storage");
-    if (vendetta.plugin.storage.channels["222"].messages.length !== 0) throw new Error("newly added channel should start with no messages");
-    console.log("  'Add current chat as decoy' correctly added channel 222 from SelectedChannelStore");
+    const baselineCount = vendetta.plugin.storage.channels["222"].messages.length;
+    if (baselineCount === 0) throw new Error("newly added channel should be auto-filled with placeholder messages, got none");
+    console.log(`  'Add current chat as decoy' added channel 222 with ${baselineCount} auto-generated placeholder message(s)`);
+    if (stores.PrivateChannelSortStore.emitChangeCount < 1) throw new Error("adding a channel from the GUI should call emitChange() to refresh the DM list");
 
     // Re-render (state lives in the closure over `store`, safe to call settings() again)
     tree = evaled.settings();
@@ -277,16 +288,18 @@ console.log("=== Scenario 4: GUI add-channel / add-message / remove flow (no JSO
     if (!card) throw new Error("couldn't find the ChannelCard element for channel 222");
 
     card.props.onAddMessage("hey what's up", false);
-    if (vendetta.plugin.storage.channels["222"].messages.length !== 1) throw new Error("onAddMessage should push a message");
+    if (vendetta.plugin.storage.channels["222"].messages.length !== baselineCount + 1) throw new Error("onAddMessage should push a message");
     card.props.onAddMessage("not much, you?", true);
-    if (vendetta.plugin.storage.channels["222"].messages.length !== 2) throw new Error("onAddMessage should push a second message");
-    console.log("  add-message flow works (2 messages added to channel 222)");
+    if (vendetta.plugin.storage.channels["222"].messages.length !== baselineCount + 2) throw new Error("onAddMessage should push a second message");
+    console.log("  add-message flow works (2 manual messages added on top of the placeholders)");
 
     tree = evaled.settings();
     const card2 = findChannelCard(tree, "222");
+    const beforeRemove = vendetta.plugin.storage.channels["222"].messages.length;
+    const lastMsg = vendetta.plugin.storage.channels["222"].messages[beforeRemove - 1].text;
     card2.props.onRemoveMessage(0);
-    if (vendetta.plugin.storage.channels["222"].messages.length !== 1) throw new Error("onRemoveMessage should splice out one message");
-    if (vendetta.plugin.storage.channels["222"].messages[0].text !== "not much, you?") throw new Error("onRemoveMessage removed the wrong message");
+    if (vendetta.plugin.storage.channels["222"].messages.length !== beforeRemove - 1) throw new Error("onRemoveMessage should splice out one message");
+    if (vendetta.plugin.storage.channels["222"].messages[vendetta.plugin.storage.channels["222"].messages.length - 1].text !== lastMsg) throw new Error("onRemoveMessage removed the wrong message (removed from the wrong end)");
     console.log("  remove-message flow works");
 
     // Now configure the unlock phrase too and confirm the whole thing actually arms.

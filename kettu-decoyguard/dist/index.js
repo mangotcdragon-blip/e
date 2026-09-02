@@ -53,11 +53,20 @@
       store.channels = {};
     let locked = true;
     const listeners = /* @__PURE__ */ new Set();
+    let sortStoreRef = null;
+    function notifyChannelListChanged() {
+      try {
+        sortStoreRef?.emitChange?.();
+      } catch (e) {
+        logger.warn("[DecoyGuard] emitChange on PrivateChannelSortStore failed", e);
+      }
+    }
     function setLocked(v) {
       if (locked === v)
         return;
       locked = v;
       listeners.forEach((l) => l());
+      notifyChannelListChanged();
     }
     function decoyIds() {
       return Object.keys(store.channels);
@@ -130,6 +139,66 @@
       } catch {
         return { exists: false, label: null };
       }
+    }
+    const PLACEHOLDER_EXCHANGES = [
+      [
+        { fromMe: false, text: "yo you doing anything this weekend" },
+        { fromMe: true, text: "not really, why what's up" },
+        { fromMe: false, text: "might just chill, no real plans yet" }
+      ],
+      [
+        { fromMe: true, text: "did you finish that thing for tmrw" },
+        { fromMe: false, text: "working on it now lol" },
+        { fromMe: true, text: "same, it's not too bad tho" }
+      ],
+      [
+        { fromMe: false, text: "did you see that game last night" },
+        { fromMe: true, text: "nah I missed it, was it good" },
+        { fromMe: false, text: "yeah pretty close game ngl" }
+      ],
+      [
+        { fromMe: true, text: "what do you wanna eat later" },
+        { fromMe: false, text: "idk, pizza maybe?" },
+        { fromMe: true, text: "bet, sounds good" }
+      ],
+      [
+        { fromMe: false, text: "omw, be there in like 10" },
+        { fromMe: true, text: "ok see you in a bit" }
+      ],
+      [
+        { fromMe: true, text: "lol did you see that video" },
+        { fromMe: false, text: "yes it was so dumb" },
+        { fromMe: true, text: "I couldn't stop laughing" }
+      ],
+      [
+        { fromMe: false, text: "can I borrow your charger later" },
+        { fromMe: true, text: "yeah for sure, I'll bring it" },
+        { fromMe: false, text: "appreciate it" }
+      ],
+      [
+        { fromMe: true, text: "how was your day" },
+        { fromMe: false, text: "pretty good, kinda tired tho" },
+        { fromMe: true, text: "same here honestly" }
+      ],
+      [
+        { fromMe: false, text: "you still coming over later?" },
+        { fromMe: true, text: "yeah should be good, on schedule" }
+      ],
+      [
+        { fromMe: true, text: "what do you have first tmrw" },
+        { fromMe: false, text: "think it's just a free period" },
+        { fromMe: true, text: "lucky, I have a test first thing" }
+      ]
+    ];
+    function hashString(s) {
+      let h = 0;
+      for (let i = 0; i < s.length; i++)
+        h = h * 31 + s.charCodeAt(i) >>> 0;
+      return h;
+    }
+    function generatePlaceholderMessages(id) {
+      const idx = hashString(String(id)) % PLACEHOLDER_EXCHANGES.length;
+      return PLACEHOLDER_EXCHANGES[idx].map((m) => ({ ...m }));
     }
     function clearChannelMessages(id) {
       try {
@@ -287,6 +356,7 @@
       if (!PrivateChannelSortStore || typeof PrivateChannelSortStore.getPrivateChannelIds !== "function") {
         throw new Error("PrivateChannelSortStore.getPrivateChannelIds not found in this build");
       }
+      sortStoreRef = PrivateChannelSortStore;
       unpatchList = patcher.after("getPrivateChannelIds", PrivateChannelSortStore, (_args, ret) => {
         if (!locked || !isConfigured() || !Array.isArray(ret))
           return ret;
@@ -417,6 +487,7 @@
           setJsonError("");
           if (locked)
             lockDecoyChannels();
+          notifyChannelListChanged();
           forceUpdate();
         } catch (e) {
           setJsonError("Invalid JSON: " + e.message);
@@ -433,6 +504,7 @@
         setJson(JSON.stringify(store.channels, null, 2));
         if (locked)
           lockDecoyChannels();
+        notifyChannelListChanged();
         forceUpdate();
       }
       function addChannel(id) {
@@ -450,7 +522,7 @@
           setAddError("That doesn't look like a DM/group channel Discord recognizes right now.");
           return;
         }
-        store.channels[id] = { label: desc.label, messages: [] };
+        store.channels[id] = { label: desc.label, messages: generatePlaceholderMessages(id) };
         setExpandedId(id);
         afterChannelsChanged();
       }
@@ -520,7 +592,7 @@
         React.createElement(
           Text,
           { style: { color: "#999", fontSize: 12, marginBottom: 8 } },
-          "Open the DM you want to use as a decoy (just tap into it), then come back to this screen and tap the button below. Do this for each of your ~10 decoy chats."
+          "Open the DM you want to use as a decoy (just tap into it), then come back to this screen and tap the button below. Do this for each of your ~10 decoy chats. Each one is auto-filled with a generic placeholder chat you can edit or replace below."
         ),
         React.createElement(Button, { label: "+ Add current chat as decoy", onPress: () => addChannel(getSelectedChannelId()) }),
         React.createElement(Text, { style: { color: "#999", fontSize: 12, marginTop: 14, marginBottom: 4 } }, "Didn't work? Paste a channel ID instead (Settings > General > enable Developer Mode, then long-press the chat > Copy ID):"),
@@ -594,6 +666,7 @@
           safe("subscribe to AppState", () => {
             appStateSub = AppState.addEventListener("change", onAppStateChange);
           });
+          notifyChannelListChanged();
         } catch (e) {
           logger.error("[DecoyGuard] unexpected error during onLoad", e);
         }
@@ -619,6 +692,7 @@
         } catch {
         }
         appStateSub = null;
+        sortStoreRef = null;
       },
       settings: Settings
     };
