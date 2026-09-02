@@ -4,12 +4,38 @@
 // `vendetta` object already in scope (see src/core/vendetta/plugins.ts ->
 // evalPlugin in the Kettu source). It intentionally does NOT import
 // anything - everything it needs comes off that `vendetta` object.
+//
+// IMPORTANT: Kettu's plugin loader (VdPluginManager.startPlugin) swallows any
+// error thrown during eval or onLoad() completely silently - the toggle just
+// snaps back off, no toast, no visible error. So NOTHING in this file is
+// allowed to throw past its own boundary: every external lookup and every
+// patch attempt is wrapped, failures are recorded into `diagnostics` instead
+// of thrown, and that list is rendered at the top of the settings screen so
+// you can see exactly what did/didn't work without needing a debugger.
 
 function start() {
-    const { patcher, metro, plugin, logger, ui } = vendetta;
+    const diagnostics = [];
+    function record(step, ok, detail) {
+        diagnostics.push({ step, ok, detail: detail ? String(detail) : "" });
+        try {
+            vendetta.logger[ok ? "log" : "error"](`[DecoyGuard] ${step}: ${ok ? "ok" : "FAILED"}${detail ? " - " + detail : ""}`);
+        } catch {}
+    }
+
+    function safe(step, fn, fallback) {
+        try {
+            const result = fn();
+            record(step, true);
+            return result;
+        } catch (e) {
+            record(step, false, e?.message ?? e);
+            return fallback;
+        }
+    }
+
+    const { patcher, metro, plugin, logger } = vendetta;
     const { React, ReactNative, FluxDispatcher, moment } = metro.common;
-    const { ScrollView, TextInput, Text, AppState } = ReactNative;
-    const { FormSection, FormRow, FormDivider, FormText } = ui.components.Forms;
+    const { ScrollView, View, TextInput, Text, TouchableOpacity, AppState } = ReactNative;
 
     const DEFAULT_PHRASE = "CHANGE-ME-IN-SETTINGS";
     const FAKE_MARKER = "kettuDecoyGuardFake";
@@ -39,10 +65,30 @@ function start() {
         return decoyIds().length > 0 && !!store.unlockPhrase && store.unlockPhrase !== DEFAULT_PHRASE;
     }
 
+    function findStore(name) {
+        try {
+            const s = metro.findByStoreName(name);
+            if (!s) throw new Error("not found");
+            return s;
+        } catch (e) {
+            return null;
+        }
+    }
+
+    function findProps(...props) {
+        try {
+            const m = metro.findByProps(...props);
+            if (!m) throw new Error("not found");
+            return m;
+        } catch (e) {
+            return null;
+        }
+    }
+
     function isPrivateChannel(id) {
         try {
-            const ChannelStore = metro.findByStoreName("ChannelStore");
-            const c = ChannelStore.getChannel(id);
+            const ChannelStore = findStore("ChannelStore");
+            const c = ChannelStore?.getChannel(id);
             return c?.type === 1 || c?.type === 3; // DM or group DM
         } catch {
             return false;
@@ -51,11 +97,11 @@ function start() {
 
     function otherRecipient(id) {
         try {
-            const ChannelStore = metro.findByStoreName("ChannelStore");
-            const UserStore = metro.findByStoreName("UserStore");
-            const c = ChannelStore.getChannel(id);
+            const ChannelStore = findStore("ChannelStore");
+            const UserStore = findStore("UserStore");
+            const c = ChannelStore?.getChannel(id);
             const rid = c?.recipients?.[0];
-            return rid ? UserStore.getUser(rid) : undefined;
+            return rid ? UserStore?.getUser(rid) : undefined;
         } catch {
             return undefined;
         }
@@ -81,8 +127,8 @@ function start() {
         const cfg = store.channels[id];
         if (!cfg) return;
 
-        const UserStore = metro.findByStoreName("UserStore");
-        const me = UserStore.getCurrentUser();
+        const UserStore = findStore("UserStore");
+        const me = UserStore?.getCurrentUser();
         const them = otherRecipient(id);
         const now = Date.now();
         const total = cfg.messages.length;
@@ -144,8 +190,8 @@ function start() {
         decoyIds().forEach(id => {
             clearChannelMessages(id);
             try {
-                const MessageActions = metro.findByProps("sendMessage");
-                MessageActions.fetchMessages?.({ channelId: id, limit: 50 });
+                const MessageActions = findProps("sendMessage");
+                MessageActions?.fetchMessages?.({ channelId: id, limit: 50 });
             } catch (e) {
                 logger.warn("[DecoyGuard] refetch failed", id, e);
             }
@@ -195,7 +241,10 @@ function start() {
     let appStateSub = null;
 
     function patchPrivateChannelList() {
-        const PrivateChannelSortStore = metro.findByStoreName("PrivateChannelSortStore");
+        const PrivateChannelSortStore = findStore("PrivateChannelSortStore");
+        if (!PrivateChannelSortStore || typeof PrivateChannelSortStore.getPrivateChannelIds !== "function") {
+            throw new Error("PrivateChannelSortStore.getPrivateChannelIds not found in this build");
+        }
         unpatchList = patcher.after("getPrivateChannelIds", PrivateChannelSortStore, (_args, ret) => {
             if (!locked || !isConfigured() || !Array.isArray(ret)) return ret;
             const allowed = new Set(decoyIds());
@@ -204,7 +253,10 @@ function start() {
     }
 
     function patchUnlockTrigger() {
-        const MessageActions = metro.findByProps("sendMessage");
+        const MessageActions = findProps("sendMessage");
+        if (!MessageActions || typeof MessageActions.sendMessage !== "function") {
+            throw new Error("MessageActions.sendMessage not found in this build");
+        }
         unpatchUnlock = patcher.instead("sendMessage", MessageActions, function (args, orig) {
             const [, message] = args;
             const content = typeof message?.content === "string" ? message.content.trim() : "";
@@ -235,6 +287,22 @@ function start() {
         }
     }
 
+    function Row({ label, subLabel, onPress }) {
+        const content = React.createElement(
+            View,
+            { style: { paddingVertical: 12, paddingHorizontal: 4, borderBottomWidth: 1, borderBottomColor: "#333" } },
+            React.createElement(Text, { style: { color: "white", fontSize: 15 } }, label),
+            subLabel ? React.createElement(Text, { style: { color: "#999", fontSize: 12, marginTop: 2 } }, subLabel) : null,
+        );
+        return onPress
+            ? React.createElement(TouchableOpacity, { onPress }, content)
+            : content;
+    }
+
+    function SectionTitle({ children }) {
+        return React.createElement(Text, { style: { color: "#999", fontSize: 12, fontWeight: "bold", marginTop: 20, marginBottom: 6, textTransform: "uppercase" } }, children);
+    }
+
     function Settings() {
         const [, forceUpdate] = React.useReducer(n => n + 1, 0);
         React.useEffect(() => {
@@ -244,102 +312,145 @@ function start() {
         }, []);
 
         const [json, setJson] = React.useState(() => JSON.stringify(store.channels, null, 2));
-        const [error, setError] = React.useState("");
+        const [jsonError, setJsonError] = React.useState("");
+        const [phrase, setPhrase] = React.useState(store.unlockPhrase);
 
-        function save() {
+        function saveJson() {
             try {
                 store.channels = JSON.parse(json);
-                setError("");
+                setJsonError("");
                 if (locked) lockDecoyChannels();
             } catch (e) {
-                setError("Invalid JSON: " + e.message);
+                setJsonError("Invalid JSON: " + e.message);
             }
         }
 
+        function savePhrase() {
+            const trimmed = phrase.trim();
+            if (!trimmed) return;
+            store.unlockPhrase = trimmed;
+            forceUpdate();
+        }
+
+        const anyFailed = diagnostics.some(d => !d.ok);
+
         return React.createElement(
             ScrollView,
-            { style: { flex: 1 }, contentContainerStyle: { padding: 12 } },
-            React.createElement(
-                FormSection,
-                { title: "Status" },
-                React.createElement(FormRow, {
-                    label: locked ? "Locked - showing decoys" : "Unlocked - showing real DMs",
-                    subLabel: "Always starts locked on app open/reload. Auto re-locks when backgrounded.",
-                }),
-                React.createElement(FormRow, {
-                    label: locked ? "Force unlock now" : "Force re-lock now",
-                    onPress: () => {
-                        if (locked) {
-                            setLocked(false);
-                            unlockDecoyChannels();
-                        } else {
-                            setLocked(true);
-                            lockDecoyChannels();
-                        }
-                    },
-                }),
-            ),
-            React.createElement(FormDivider, null),
-            React.createElement(
-                FormSection,
-                { title: "Unlock phrase" },
-                React.createElement(FormRow, {
-                    label: "Change unlock phrase",
-                    subLabel: "Type into any DM box + send while locked to unlock (intercepted, never actually sent). Send again while unlocked to re-lock.",
-                    onPress: () =>
-                        ui.alerts.showInputAlert({
-                            title: "Unlock phrase",
-                            placeholder: "your secret phrase",
-                            initialValue: store.unlockPhrase,
-                            confirmText: "Save",
-                            onConfirm: value => {
-                                const trimmed = value.trim();
-                                if (!trimmed) throw new Error("Can't be empty");
-                                store.unlockPhrase = trimmed;
-                            },
-                        }),
-                }),
-            ),
-            React.createElement(FormDivider, null),
-            React.createElement(
-                FormSection,
-                { title: "Decoy channels (raw JSON)" },
-                React.createElement(
-                    FormText,
-                    null,
-                    'Format: {"CHANNEL_ID": {"label": "your reference only", "messages": [{"fromMe": true, "text": "..."}, {"fromMe": false, "text": "..."}]}}',
+            { style: { flex: 1, backgroundColor: "#000" }, contentContainerStyle: { padding: 16 } },
+
+            anyFailed && React.createElement(
+                View,
+                { style: { backgroundColor: "#3a1f1f", borderRadius: 6, padding: 10, marginBottom: 16 } },
+                React.createElement(Text, { style: { color: "#f04747", fontWeight: "bold", marginBottom: 4 } }, "Some internal lookups failed - functionality below is degraded:"),
+                ...diagnostics.filter(d => !d.ok).map(d =>
+                    React.createElement(Text, { style: { color: "#f0a0a0", fontSize: 12 } }, `- ${d.step}: ${d.detail}`),
                 ),
-                React.createElement(TextInput, {
-                    value: json,
-                    onChangeText: setJson,
-                    placeholder: "{}",
-                    multiline: true,
-                    style: { minHeight: 220, color: "white", textAlignVertical: "top", padding: 8, borderWidth: 1, borderColor: "#555", borderRadius: 4, marginBottom: 8 },
-                }),
-                error ? React.createElement(Text, { style: { color: "#f04747", marginBottom: 8 } }, error) : null,
-                React.createElement(FormRow, { label: "Save decoy config", onPress: save }),
             ),
+
+            React.createElement(SectionTitle, null, "Status"),
+            React.createElement(Row, {
+                label: locked ? "Locked - showing decoys" : "Unlocked - showing real DMs",
+                subLabel: "Always starts locked on app open/reload. Auto re-locks when backgrounded.",
+            }),
+            React.createElement(Row, {
+                label: locked ? "Force unlock now" : "Force re-lock now",
+                onPress: () => {
+                    if (locked) {
+                        setLocked(false);
+                        unlockDecoyChannels();
+                    } else {
+                        setLocked(true);
+                        lockDecoyChannels();
+                    }
+                    forceUpdate();
+                },
+            }),
+
+            React.createElement(SectionTitle, null, "Diagnostics"),
+            ...diagnostics.map(d =>
+                React.createElement(Text, { style: { color: d.ok ? "#43b581" : "#f04747", fontSize: 12, marginBottom: 2 } }, `${d.ok ? "OK" : "FAIL"}  ${d.step}${d.detail ? " - " + d.detail : ""}`),
+            ),
+
+            React.createElement(SectionTitle, null, "Unlock phrase"),
+            React.createElement(Text, { style: { color: "#999", fontSize: 12, marginBottom: 8 } },
+                "Type this into any DM box + send while locked to unlock (intercepted, never actually sent). Send it again while unlocked to re-lock.",
+            ),
+            React.createElement(TextInput, {
+                value: phrase,
+                onChangeText: setPhrase,
+                placeholder: "your secret phrase",
+                placeholderTextColor: "#666",
+                style: { color: "white", borderWidth: 1, borderColor: "#555", borderRadius: 4, padding: 8, marginBottom: 8 },
+            }),
+            React.createElement(Row, { label: "Save phrase", onPress: savePhrase }),
+
+            React.createElement(SectionTitle, null, "Decoy channels (raw JSON)"),
+            React.createElement(Text, { style: { color: "#999", fontSize: 12, marginBottom: 8 } },
+                'Format: {"CHANNEL_ID": {"label": "your reference only", "messages": [{"fromMe": true, "text": "..."}, {"fromMe": false, "text": "..."}]}}',
+            ),
+            React.createElement(TextInput, {
+                value: json,
+                onChangeText: setJson,
+                placeholder: "{}",
+                placeholderTextColor: "#666",
+                multiline: true,
+                style: { minHeight: 220, color: "white", textAlignVertical: "top", padding: 8, borderWidth: 1, borderColor: "#555", borderRadius: 4, marginBottom: 8 },
+            }),
+            jsonError ? React.createElement(Text, { style: { color: "#f04747", marginBottom: 8 } }, jsonError) : null,
+            React.createElement(Row, { label: "Save decoy config", onPress: saveJson }),
         );
     }
 
     return {
         onLoad() {
-            setLocked(true);
-            installInterceptor();
-            patchPrivateChannelList();
-            patchUnlockTrigger();
-            lockDecoyChannels();
-            appStateSub = AppState.addEventListener("change", onAppStateChange);
+            try {
+                setLocked(true);
+                safe("install Flux interceptor", installInterceptor);
+                safe("patch DM list filtering", patchPrivateChannelList);
+                safe("patch unlock trigger (sendMessage)", patchUnlockTrigger);
+                safe("populate decoy content", lockDecoyChannels);
+                safe("subscribe to AppState", () => {
+                    appStateSub = AppState.addEventListener("change", onAppStateChange);
+                });
+            } catch (e) {
+                // Should be unreachable (every step above is wrapped by safe()),
+                // but if something still slips through, log it loudly instead
+                // of letting it propagate and silently kill activation.
+                logger.error("[DecoyGuard] unexpected error during onLoad", e);
+            }
         },
         onUnload() {
-            unpatchList();
-            unpatchUnlock();
-            restoreInterceptor();
-            appStateSub?.remove();
+            try { unpatchList(); } catch (e) { logger.error("[DecoyGuard] unpatchList failed", e); }
+            try { unpatchUnlock(); } catch (e) { logger.error("[DecoyGuard] unpatchUnlock failed", e); }
+            try { restoreInterceptor(); } catch (e) { logger.error("[DecoyGuard] restoreInterceptor failed", e); }
+            try { appStateSub?.remove(); } catch {}
             appStateSub = null;
         },
         settings: Settings,
     };
 }
 
-export default start();
+let started;
+try {
+    started = start();
+} catch (e) {
+    // Absolute last resort: if even start() itself throws (e.g. the
+    // `vendetta` object's shape is unexpectedly different), still return
+    // something that ACTIVATES and tells you what happened, instead of
+    // silently failing to enable with zero feedback.
+    started = {
+        onLoad() {},
+        onUnload() {},
+        settings() {
+            const { React, ReactNative } = vendetta.metro.common;
+            return React.createElement(
+                ReactNative.View,
+                { style: { flex: 1, padding: 16, backgroundColor: "#000" } },
+                React.createElement(ReactNative.Text, { style: { color: "#f04747", fontWeight: "bold", marginBottom: 8 } }, "Decoy Guard failed to initialize"),
+                React.createElement(ReactNative.Text, { style: { color: "#f0a0a0" } }, String(e?.stack ?? e)),
+            );
+        },
+    };
+}
+
+export default started;
