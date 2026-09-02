@@ -34,7 +34,7 @@ function start() {
     }
 
     const { patcher, metro, plugin, logger } = vendetta;
-    const { React, ReactNative, FluxDispatcher, moment } = metro.common;
+    const { React, ReactNative, FluxDispatcher } = metro.common;
     const { ScrollView, View, TextInput, Text, TouchableOpacity, AppState } = ReactNative;
 
     const DEFAULT_PHRASE = "CHANGE-ME-IN-SETTINGS";
@@ -67,11 +67,25 @@ function start() {
         }
     }
 
+    // Same reasoning, for whatever channel's message view happens to be open
+    // right now: patching getMessages() changes what it returns, but the
+    // open chat screen won't re-render with the new (fake vs real) content
+    // until MessageStore itself says something changed.
+    let messageStoreRef = null;
+    function notifyMessagesChanged() {
+        try {
+            messageStoreRef?.emitChange?.();
+        } catch (e) {
+            logger.warn("[DecoyGuard] emitChange on MessageStore failed", e);
+        }
+    }
+
     function setLocked(v) {
         if (locked === v) return;
         locked = v;
         listeners.forEach(l => l());
         notifyChannelListChanged();
+        notifyMessagesChanged();
     }
 
     function decoyIds() {
@@ -224,22 +238,20 @@ function start() {
         return PLACEHOLDER_EXCHANGES[idx].map(m => ({ ...m })); // clone, don't share references
     }
 
-    function clearChannelMessages(id) {
-        try {
-            FluxDispatcher.dispatch({
-                type: "LOAD_MESSAGES_SUCCESS",
-                channelId: id,
-                messages: [],
-                isBefore: true,
-                isAfter: true,
-                hasMoreBefore: false,
-                hasMoreAfter: false,
-            });
-        } catch (e) {
-            logger.error("[DecoyGuard] clear failed", id, e);
-        }
-    }
-
+    // IMPORTANT (learned the hard way from a real crash + real data loss):
+    // never touch a decoy channel's REAL message history to hide it.
+    // Dispatching a "wipe" (LOAD_MESSAGES_SUCCESS with an empty array) told
+    // Discord's own state that the channel truly has no messages, which
+    // corrupted its real recency/sort metadata badly enough that the channel
+    // dropped out of the DM list even after unlocking - actual data-adjacent
+    // damage, not just a display glitch. So: real history is NEVER wiped or
+    // replaced. We only ever ADD our own fake messages (their ids are always
+    // prefixed "decoyguard-" so they're unambiguous - never derived from any
+    // custom field, since Discord's own message normalization may not
+    // preserve fields it doesn't recognize) alongside the untouched real
+    // ones, and patchMessageContent() below decides, purely at READ time,
+    // which set (fake-only vs real-only) actually gets rendered depending on
+    // lock state. Real messages are always sitting there safely underneath.
     function injectFakeMessages(id) {
         const cfg = store.channels[id];
         if (!cfg) return;
@@ -255,6 +267,9 @@ function start() {
             if (!author) return;
 
             const message = {
+                // Stable per (channel, index) id: re-dispatching on every
+                // lock cycle just updates the same entry in place rather
+                // than duplicating it.
                 id: `decoyguard-${id}-${i}`,
                 channel_id: id,
                 author: {
@@ -266,7 +281,13 @@ function start() {
                     global_name: author.globalName ?? author.username,
                 },
                 content: m.text,
-                timestamp: moment(now - (total - i) * 60_000),
+                // Real Discord messages carry timestamp as an ISO8601
+                // string (that's the actual wire format) - NOT a moment()
+                // instance. Passing a live moment object here is what threw
+                // "RangeError: Invalid time value" deep in Discord's own
+                // i18n time formatting the moment something else tried to
+                // read this field expecting a string/Date-parseable value.
+                timestamp: new Date(now - (total - i) * 60_000).toISOString(),
                 edited_timestamp: null,
                 tts: false,
                 mention_everyone: false,
@@ -278,6 +299,7 @@ function start() {
                 pinned: false,
                 type: 0,
                 flags: 0,
+                nonce: null,
             };
 
             try {
@@ -297,22 +319,14 @@ function start() {
 
     function lockDecoyChannels() {
         if (!isConfigured()) return;
-        decoyIds().forEach(id => {
-            clearChannelMessages(id);
-            injectFakeMessages(id);
-        });
+        decoyIds().forEach(id => injectFakeMessages(id));
+        notifyMessagesChanged();
     }
 
     function unlockDecoyChannels() {
-        decoyIds().forEach(id => {
-            clearChannelMessages(id);
-            try {
-                const MessageActions = findProps("sendMessage");
-                MessageActions?.fetchMessages?.({ channelId: id, limit: 50 });
-            } catch (e) {
-                logger.warn("[DecoyGuard] refetch failed", id, e);
-            }
-        });
+        // Nothing to restore - real history was never touched. Just make
+        // sure any currently-open message view re-renders to show it.
+        notifyMessagesChanged();
     }
 
     // Two known shapes for Discord's dispatcher interceptor across builds:
@@ -395,6 +409,7 @@ function start() {
     }
 
     let unpatchList = () => {};
+    let unpatchMessages = () => {};
     let unpatchUnlock = () => {};
     let appStateSub = null;
 
@@ -408,6 +423,34 @@ function start() {
             if (!locked || !isConfigured() || !Array.isArray(ret)) return ret;
             const allowed = new Set(decoyIds());
             return ret.filter(id => allowed.has(id));
+        });
+    }
+
+    // Read-path only, never touches real data: for a decoy channel, decide
+    // at render time whether to show our fake-marked messages (locked) or
+    // the real ones (unlocked), by filtering whatever the real getMessages()
+    // already returns. Real history sits in the store untouched either way -
+    // this is what fixes the "channel disappeared for real" bug, since
+    // there's no longer any wipe/replace dispatch that could damage it.
+    // Relies on `.filter()` existing on the returned collection and
+    // preserving its type, which is true for a plain array and for every
+    // Immutable-style list Discord tends to use for this; if it's ever not,
+    // we just return the untouched result rather than guessing further.
+    function patchMessageContent() {
+        const MessageStore = findStore("MessageStore");
+        if (!MessageStore || typeof MessageStore.getMessages !== "function") {
+            throw new Error("MessageStore.getMessages not found in this build");
+        }
+        messageStoreRef = MessageStore;
+        unpatchMessages = patcher.after("getMessages", MessageStore, (args, ret) => {
+            const [channelId] = args;
+            if (!store.channels[channelId] || !ret || typeof ret.filter !== "function") return ret;
+
+            const showFake = locked && isConfigured();
+            return ret.filter(m => {
+                const isFake = typeof m?.id === "string" && m.id.startsWith("decoyguard-");
+                return showFake ? isFake : !isFake;
+            });
         });
     }
 
@@ -721,12 +764,14 @@ function start() {
                 setLocked(true);
                 safe("install Flux interceptor", installInterceptor);
                 safe("patch DM list filtering", patchPrivateChannelList);
+                safe("patch message content filtering", patchMessageContent);
                 safe("patch unlock trigger (sendMessage)", patchUnlockTrigger);
                 safe("populate decoy content", lockDecoyChannels);
                 safe("subscribe to AppState", () => {
                     appStateSub = AppState.addEventListener("change", onAppStateChange);
                 });
                 notifyChannelListChanged(); // in case it was already configured when enabled
+                notifyMessagesChanged();
             } catch (e) {
                 // Should be unreachable (every step above is wrapped by safe()),
                 // but if something still slips through, log it loudly instead
@@ -736,11 +781,13 @@ function start() {
         },
         onUnload() {
             try { unpatchList(); } catch (e) { logger.error("[DecoyGuard] unpatchList failed", e); }
+            try { unpatchMessages(); } catch (e) { logger.error("[DecoyGuard] unpatchMessages failed", e); }
             try { unpatchUnlock(); } catch (e) { logger.error("[DecoyGuard] unpatchUnlock failed", e); }
             try { restoreInterceptor(); } catch (e) { logger.error("[DecoyGuard] restoreInterceptor failed", e); }
             try { appStateSub?.remove(); } catch {}
             appStateSub = null;
             sortStoreRef = null;
+            messageStoreRef = null;
         },
         settings: Settings,
     };

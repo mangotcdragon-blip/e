@@ -17,6 +17,15 @@ function makeVendetta({ storesAvailable, messageActionsAvailable, dispatcherHasS
     const interceptorHolder = {};
     const dispatched = [];
     const applied = [];
+    const messagesByChannel = {}; // simulates MessageStore's real backing data
+
+    function applyToMessageStore(action) {
+        if (action?.type !== "MESSAGE_CREATE") return;
+        const list = (messagesByChannel[action.channelId] ??= []);
+        const idx = list.findIndex(m => m.id === action.message.id);
+        if (idx === -1) list.push(action.message);
+        else list[idx] = action.message; // stable id -> update in place, matches real dedup-by-id behavior
+    }
 
     const stores = {
         ChannelStore: { getChannel: (id) => (id === "999" ? undefined : { type: 1, recipients: ["999"] }) },
@@ -26,6 +35,11 @@ function makeVendetta({ storesAvailable, messageActionsAvailable, dispatcherHasS
         },
         PrivateChannelSortStore: {
             getPrivateChannelIds: () => ["111", "222", "333"],
+            emitChangeCount: 0,
+            emitChange() { this.emitChangeCount++; },
+        },
+        MessageStore: {
+            getMessages: (channelId) => (messagesByChannel[channelId] ?? []).slice(),
             emitChangeCount: 0,
             emitChange() { this.emitChangeCount++; },
         },
@@ -105,9 +119,9 @@ function makeVendetta({ storesAvailable, messageActionsAvailable, dispatcherHasS
                                 if (fn(action)) return; // blocked - never "applied"
                             }
                             applied.push(action); // reached stores
+                            applyToMessageStore(action);
                         },
                     },
-                moment: (ms) => ({ valueOf: () => ms }),
             },
         },
         plugin: { id: "test/", manifest: { name: "Decoy Guard Test" }, storage: {} },
@@ -119,7 +133,7 @@ function makeVendetta({ storesAvailable, messageActionsAvailable, dispatcherHasS
         ui: { components: {}, alerts: { showInputAlert: () => {} } },
     };
 
-    return { vendetta, stores, messageActions, dispatched, applied };
+    return { vendetta, stores, messageActions, dispatched, applied, messagesByChannel };
 }
 
 function evalPluginLike(vendetta) {
@@ -132,7 +146,7 @@ function evalPluginLike(vendetta) {
 
 console.log("=== Scenario 1: everything available (happy path) ===");
 {
-    const { vendetta, stores, messageActions, dispatched, applied } = makeVendetta({ storesAvailable: true, messageActionsAvailable: true });
+    const { vendetta, stores, messageActions, dispatched, applied, messagesByChannel } = makeVendetta({ storesAvailable: true, messageActionsAvailable: true });
     const evaled = evalPluginLike(vendetta);
 
     if (typeof evaled.onLoad !== "function") throw new Error("onLoad missing");
@@ -148,6 +162,11 @@ console.log("=== Scenario 1: everything available (happy path) ===");
     vendetta.plugin.storage.unlockPhrase = "banana bread recipe";
     vendetta.plugin.storage.channels = { "111": { label: "friend", messages: [{ fromMe: false, text: "yo" }, { fromMe: true, text: "hey" }] } };
 
+    // Channel 111 already has real chat history from before it was ever
+    // configured as a decoy - simulates the real-world case this bug was
+    // about (an existing DM you actually talk in, now used as a decoy).
+    messagesByChannel["111"] = [{ id: "real-msg-1", channel_id: "111", content: "hey did you get my last text", author: { id: "999" } }];
+
     evaled.onUnload();
     const evaled2 = evalPluginLike(vendetta);
     evaled2.onLoad();
@@ -158,6 +177,19 @@ console.log("=== Scenario 1: everything available (happy path) ===");
     if (!applied.some(a => a.type === "MESSAGE_CREATE")) throw new Error("our own fake MESSAGE_CREATE dispatches should reach the stores (FAKE_MARKER lets them through)");
     if (stores.PrivateChannelSortStore.emitChangeCount < 1) throw new Error("onLoad (already configured) should call emitChange() so the DM list actually re-renders - this is the fix for 'nothing changed' on-device");
     console.log(`  emitChange() called ${stores.PrivateChannelSortStore.emitChangeCount}x so far - confirms the DM list is actually told to refresh`);
+
+    console.log("  testing message content filter (the fix for the RangeError crash + real DM disappearing)...");
+    const rawStoredMessages = messagesByChannel["111"];
+    if (!rawStoredMessages.some(m => m.id === "real-msg-1")) throw new Error("test setup issue: real pre-existing message should still be sitting in the backing store");
+    const shownWhileLocked = stores.MessageStore.getMessages("111");
+    if (shownWhileLocked.some(m => m.id === "real-msg-1")) throw new Error("real pre-existing message should be hidden from the rendered view while locked");
+    if (!shownWhileLocked.some(m => m.id?.startsWith("decoyguard-"))) throw new Error("fake messages should be shown while locked");
+    for (const m of shownWhileLocked) {
+        if (typeof m.timestamp !== "string" || Number.isNaN(Date.parse(m.timestamp))) {
+            throw new Error("fake message timestamp must be a valid ISO string, not a moment object - got " + JSON.stringify(m.timestamp) + " (this is exactly the RangeError crash)");
+        }
+    }
+    console.log("  real history hidden + fake shown while locked, and fake timestamps are valid ISO strings");
 
     console.log("  testing real-time blocking via the array-based interceptor (the actual fix for this device)...");
     const appliedCountBefore = applied.length;
@@ -173,6 +205,11 @@ console.log("=== Scenario 1: everything available (happy path) ===");
     if (unlockedIds.length !== 3) throw new Error("after unlock, full DM list should be restored");
     const emitCountAfterUnlock = stores.PrivateChannelSortStore.emitChangeCount;
     if (emitCountAfterUnlock < 2) throw new Error("unlocking should also call emitChange() again to refresh the now-unfiltered list");
+
+    const shownAfterUnlock = stores.MessageStore.getMessages("111");
+    if (!shownAfterUnlock.some(m => m.id === "real-msg-1")) throw new Error("real message should reappear once unlocked - and critically, it should never have been destroyed to begin with");
+    if (shownAfterUnlock.some(m => m.id?.startsWith("decoyguard-"))) throw new Error("fake messages should be hidden once unlocked, not mixed in with real ones");
+    console.log("  real history correctly restored (never actually touched) + fake hidden, once unlocked");
 
     vendetta.__appStateCb("background");
     const relockedIds = stores.PrivateChannelSortStore.getPrivateChannelIds();

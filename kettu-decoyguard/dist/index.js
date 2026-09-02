@@ -42,7 +42,7 @@
       }
     }
     const { patcher, metro, plugin, logger } = vendetta;
-    const { React, ReactNative, FluxDispatcher, moment } = metro.common;
+    const { React, ReactNative, FluxDispatcher } = metro.common;
     const { ScrollView, View, TextInput, Text, TouchableOpacity, AppState } = ReactNative;
     const DEFAULT_PHRASE = "CHANGE-ME-IN-SETTINGS";
     const FAKE_MARKER = "kettuDecoyGuardFake";
@@ -61,12 +61,21 @@
         logger.warn("[DecoyGuard] emitChange on PrivateChannelSortStore failed", e);
       }
     }
+    let messageStoreRef = null;
+    function notifyMessagesChanged() {
+      try {
+        messageStoreRef?.emitChange?.();
+      } catch (e) {
+        logger.warn("[DecoyGuard] emitChange on MessageStore failed", e);
+      }
+    }
     function setLocked(v) {
       if (locked === v)
         return;
       locked = v;
       listeners.forEach((l) => l());
       notifyChannelListChanged();
+      notifyMessagesChanged();
     }
     function decoyIds() {
       return Object.keys(store.channels);
@@ -200,21 +209,6 @@
       const idx = hashString(String(id)) % PLACEHOLDER_EXCHANGES.length;
       return PLACEHOLDER_EXCHANGES[idx].map((m) => ({ ...m }));
     }
-    function clearChannelMessages(id) {
-      try {
-        FluxDispatcher.dispatch({
-          type: "LOAD_MESSAGES_SUCCESS",
-          channelId: id,
-          messages: [],
-          isBefore: true,
-          isAfter: true,
-          hasMoreBefore: false,
-          hasMoreAfter: false
-        });
-      } catch (e) {
-        logger.error("[DecoyGuard] clear failed", id, e);
-      }
-    }
     function injectFakeMessages(id) {
       const cfg = store.channels[id];
       if (!cfg)
@@ -229,6 +223,9 @@
         if (!author)
           return;
         const message = {
+          // Stable per (channel, index) id: re-dispatching on every
+          // lock cycle just updates the same entry in place rather
+          // than duplicating it.
           id: `decoyguard-${id}-${i}`,
           channel_id: id,
           author: {
@@ -240,7 +237,13 @@
             global_name: author.globalName ?? author.username
           },
           content: m.text,
-          timestamp: moment(now - (total - i) * 6e4),
+          // Real Discord messages carry timestamp as an ISO8601
+          // string (that's the actual wire format) - NOT a moment()
+          // instance. Passing a live moment object here is what threw
+          // "RangeError: Invalid time value" deep in Discord's own
+          // i18n time formatting the moment something else tried to
+          // read this field expecting a string/Date-parseable value.
+          timestamp: new Date(now - (total - i) * 6e4).toISOString(),
           edited_timestamp: null,
           tts: false,
           mention_everyone: false,
@@ -251,7 +254,8 @@
           reactions: [],
           pinned: false,
           type: 0,
-          flags: 0
+          flags: 0,
+          nonce: null
         };
         try {
           FluxDispatcher.dispatch({
@@ -270,21 +274,11 @@
     function lockDecoyChannels() {
       if (!isConfigured())
         return;
-      decoyIds().forEach((id) => {
-        clearChannelMessages(id);
-        injectFakeMessages(id);
-      });
+      decoyIds().forEach((id) => injectFakeMessages(id));
+      notifyMessagesChanged();
     }
     function unlockDecoyChannels() {
-      decoyIds().forEach((id) => {
-        clearChannelMessages(id);
-        try {
-          const MessageActions = findProps("sendMessage");
-          MessageActions?.fetchMessages?.({ channelId: id, limit: 50 });
-        } catch (e) {
-          logger.warn("[DecoyGuard] refetch failed", id, e);
-        }
-      });
+      notifyMessagesChanged();
     }
     let previousInterceptor;
     let interceptorInstalled = false;
@@ -348,6 +342,8 @@
     }
     let unpatchList = () => {
     };
+    let unpatchMessages = () => {
+    };
     let unpatchUnlock = () => {
     };
     let appStateSub = null;
@@ -362,6 +358,23 @@
           return ret;
         const allowed = new Set(decoyIds());
         return ret.filter((id) => allowed.has(id));
+      });
+    }
+    function patchMessageContent() {
+      const MessageStore = findStore("MessageStore");
+      if (!MessageStore || typeof MessageStore.getMessages !== "function") {
+        throw new Error("MessageStore.getMessages not found in this build");
+      }
+      messageStoreRef = MessageStore;
+      unpatchMessages = patcher.after("getMessages", MessageStore, (args, ret) => {
+        const [channelId] = args;
+        if (!store.channels[channelId] || !ret || typeof ret.filter !== "function")
+          return ret;
+        const showFake = locked && isConfigured();
+        return ret.filter((m) => {
+          const isFake = typeof m?.id === "string" && m.id.startsWith("decoyguard-");
+          return showFake ? isFake : !isFake;
+        });
       });
     }
     function patchUnlockTrigger() {
@@ -661,12 +674,14 @@
           setLocked(true);
           safe("install Flux interceptor", installInterceptor);
           safe("patch DM list filtering", patchPrivateChannelList);
+          safe("patch message content filtering", patchMessageContent);
           safe("patch unlock trigger (sendMessage)", patchUnlockTrigger);
           safe("populate decoy content", lockDecoyChannels);
           safe("subscribe to AppState", () => {
             appStateSub = AppState.addEventListener("change", onAppStateChange);
           });
           notifyChannelListChanged();
+          notifyMessagesChanged();
         } catch (e) {
           logger.error("[DecoyGuard] unexpected error during onLoad", e);
         }
@@ -676,6 +691,11 @@
           unpatchList();
         } catch (e) {
           logger.error("[DecoyGuard] unpatchList failed", e);
+        }
+        try {
+          unpatchMessages();
+        } catch (e) {
+          logger.error("[DecoyGuard] unpatchMessages failed", e);
         }
         try {
           unpatchUnlock();
@@ -693,6 +713,7 @@
         }
         appStateSub = null;
         sortStoreRef = null;
+        messageStoreRef = null;
       },
       settings: Settings
     };
