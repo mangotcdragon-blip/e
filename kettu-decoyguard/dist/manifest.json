@@ -1,0 +1,11 @@
+{
+  "name": "Kettu Decoy Guard",
+  "description": "Hides your real DMs behind decoy conversations until you type a secret unlock phrase",
+  "authors": [
+    {
+      "name": "you"
+    }
+  ],
+  "main": "index.js",
+  "hash": "4fc5c3fa035a901f"
+}
