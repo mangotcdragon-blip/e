@@ -14,7 +14,19 @@ interface E621Api {
         @Query("limit") limit: Int,
         @Query("page") page: Int,
     ): E621PostsResponse
+
+    @GET("tags/autocomplete.json")
+    suspend fun autocompleteTags(
+        @Query("search[name_matches]") prefix: String,
+        @Query("limit") limit: Int,
+    ): List<E621TagSuggestion>
 }
+
+data class E621TagSuggestion(
+    val id: Long?,
+    val name: String?,
+    @SerializedName("post_count") val postCount: Int?,
+)
 
 data class E621PostsResponse(
     val posts: List<E621Post>?

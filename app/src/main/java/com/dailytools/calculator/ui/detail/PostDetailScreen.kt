@@ -11,7 +11,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.VerticalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
@@ -26,7 +26,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -38,21 +40,33 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.dailytools.calculator.data.model.MediaKind
-import com.dailytools.calculator.data.model.Post
+import com.dailytools.calculator.ui.browser.BrowserViewModel
 import com.dailytools.calculator.util.downloadPost
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PostDetailScreen(
-    posts: List<Post>,
+    viewModel: BrowserViewModel,
     initialIndex: Int,
     onBack: () -> Unit,
 ) {
-    val pagerState = rememberPagerState(initialPage = initialIndex) { posts.size }
+    val state = viewModel.uiState
+    val posts = state.posts
+    val pagerState = rememberPagerState(
+        initialPage = initialIndex.coerceIn(0, (posts.size - 1).coerceAtLeast(0)),
+    ) { posts.size }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var isDownloading by remember { mutableStateOf(false) }
+
+    // Doomscroll: remember exactly which post we're on, and keep the feed topped up.
+    LaunchedEffect(pagerState.currentPage, posts.size) {
+        posts.getOrNull(pagerState.currentPage)?.let { viewModel.setViewingPost(it.id) }
+        if (posts.isNotEmpty() && pagerState.currentPage >= posts.size - 5) {
+            viewModel.loadMore()
+        }
+    }
 
     Scaffold(
         containerColor = Color.Black,
@@ -94,14 +108,19 @@ fun PostDetailScreen(
                         Icon(Icons.Filled.Download, contentDescription = "Download", tint = Color.White)
                     }
                 },
-                colors = androidx.compose.material3.TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color.Black,
-                ),
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Black),
             )
         },
     ) { padding ->
+        if (posts.isEmpty()) {
+            Box(modifier = Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(color = Color.White)
+            }
+            return@Scaffold
+        }
+
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
-            HorizontalPager(
+            VerticalPager(
                 state = pagerState,
                 modifier = Modifier.weight(1f),
             ) { page ->

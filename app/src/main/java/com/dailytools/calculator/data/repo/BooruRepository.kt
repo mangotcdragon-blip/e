@@ -9,6 +9,7 @@ import com.dailytools.calculator.data.model.SortOrder
 import com.dailytools.calculator.data.network.E621Post
 import com.dailytools.calculator.data.network.NetworkModule
 import com.dailytools.calculator.data.network.Rule34Post
+import java.net.URLEncoder
 
 /** Posts per page, per the desired browsing density. */
 const val PAGE_SIZE = 200
@@ -38,6 +39,26 @@ class BooruRepository {
                 }
             }
         }
+    }
+
+    /** Autocompletes the tag the user is currently typing. Fails silently (empty list) on any error. */
+    suspend fun suggestTags(source: Source, prefix: String): List<String> {
+        if (prefix.isBlank()) return emptyList()
+        return runCatching {
+            when (source) {
+                Source.E621 -> NetworkModule.e621Api
+                    .autocompleteTags(prefix = prefix, limit = 8)
+                    .mapNotNull { it.name }
+
+                Source.RULE34 -> {
+                    val encoded = URLEncoder.encode(prefix, "UTF-8")
+                    NetworkModule.rule34Api
+                        .autocompleteTags("https://rule34.xxx/autocomplete.php?q=$encoded")
+                        .orEmpty()
+                        .mapNotNull { it.value ?: it.label }
+                }
+            }
+        }.getOrElse { emptyList() }
     }
 
     private fun buildTags(query: String, rating: Rating, sort: SortOrder?): String {

@@ -2,19 +2,24 @@ package com.dailytools.calculator.ui.browser
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items as lazyRowItems
 import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
 import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
 import androidx.compose.foundation.lazy.staggeredgrid.items
 import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridState
 import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -32,22 +37,27 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
-import com.dailytools.calculator.data.model.Post
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.distinctUntilChanged
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun BrowserScreen(
     viewModel: BrowserViewModel,
-    onOpenPost: (List<Post>, Int) -> Unit,
+    onOpenPost: (Int) -> Unit,
     onOpenSettings: () -> Unit,
 ) {
     val state = viewModel.uiState
     var showFilters by remember { mutableStateOf(false) }
-    val gridState = rememberLazyStaggeredGridState()
+    val gridState = rememberLazyStaggeredGridState(
+        initialFirstVisibleItemIndex = state.initialGridScrollIndex,
+    )
 
     val shouldLoadMore by remember {
         derivedStateOf {
@@ -60,27 +70,17 @@ fun BrowserScreen(
         if (shouldLoadMore) viewModel.loadMore()
     }
 
+    LaunchedEffect(gridState) {
+        snapshotFlow { gridState.firstVisibleItemIndex }
+            .distinctUntilChanged()
+            .debounce(500)
+            .collect { index -> viewModel.updateGridScrollIndex(index) }
+    }
+
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
-                title = {
-                    TextField(
-                        value = state.queryInput,
-                        onValueChange = viewModel::onQueryInputChange,
-                        placeholder = { Text("Search tags…") },
-                        singleLine = true,
-                        colors = TextFieldDefaults.colors(
-                            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-                            focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-                            unfocusedIndicatorColor = androidx.compose.ui.graphics.Color.Transparent,
-                            focusedIndicatorColor = androidx.compose.ui.graphics.Color.Transparent,
-                        ),
-                        leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
-                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = ImeAction.Search),
-                        keyboardActions = KeyboardActions(onSearch = { viewModel.submitSearch() }),
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                },
+                title = { Text("Browse") },
                 actions = {
                     IconButton(onClick = { showFilters = true }) {
                         Icon(Icons.Filled.FilterList, contentDescription = "Filters")
@@ -92,53 +92,86 @@ fun BrowserScreen(
             )
         },
     ) { padding ->
-        Box(modifier = Modifier.fillMaxSize().padding(padding)) {
-            LazyVerticalStaggeredGrid(
-                columns = StaggeredGridCells.Fixed(2),
-                state = gridState,
-                contentPadding = PaddingValues(8.dp),
-                verticalItemSpacing = 8.dp,
-                horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp),
-                modifier = Modifier.fillMaxSize(),
-            ) {
-                items(state.posts.size) { index ->
-                    val post = state.posts[index]
-                    PostThumbnail(
-                        post = post,
-                        onClick = { onOpenPost(state.posts, index) },
-                    )
+        Column(modifier = Modifier.fillMaxSize().padding(padding)) {
+            TextField(
+                value = state.queryInput,
+                onValueChange = viewModel::onQueryInputChange,
+                placeholder = { Text("Search tags…") },
+                singleLine = true,
+                colors = TextFieldDefaults.colors(
+                    unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                    focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                    unfocusedIndicatorColor = Color.Transparent,
+                    focusedIndicatorColor = Color.Transparent,
+                ),
+                leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                keyboardActions = KeyboardActions(onSearch = { viewModel.submitSearch() }),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 4.dp),
+            )
+
+            if (state.suggestions.isNotEmpty()) {
+                LazyRow(
+                    contentPadding = PaddingValues(horizontal = 12.dp),
+                    horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.padding(bottom = 4.dp),
+                ) {
+                    lazyRowItems(state.suggestions) { tag ->
+                        AssistChip(onClick = { viewModel.applySuggestion(tag) }, label = { Text(tag) })
+                    }
                 }
             }
 
-            if (state.isLoading) {
-                CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
-            }
+            Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
+                LazyVerticalStaggeredGrid(
+                    columns = StaggeredGridCells.Fixed(2),
+                    state = gridState,
+                    contentPadding = PaddingValues(8.dp),
+                    verticalItemSpacing = 8.dp,
+                    horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxSize(),
+                ) {
+                    items(state.posts.size) { index ->
+                        val post = state.posts[index]
+                        PostThumbnail(
+                            post = post,
+                            onClick = { onOpenPost(index) },
+                        )
+                    }
+                }
 
-            if (state.isLoadingMore) {
-                CircularProgressIndicator(
-                    modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .padding(16.dp),
-                )
-            }
+                if (state.isLoading) {
+                    CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+                }
 
-            state.error?.let { message ->
-                Text(
-                    text = message,
-                    color = MaterialTheme.colorScheme.error,
-                    modifier = Modifier
-                        .align(Alignment.Center)
-                        .padding(24.dp),
-                )
-            }
+                if (state.isLoadingMore) {
+                    CircularProgressIndicator(
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .padding(16.dp),
+                    )
+                }
 
-            if (!state.isLoading && state.posts.isEmpty() && state.error == null) {
-                Text(
-                    text = "No results. Try different tags.",
-                    modifier = Modifier
-                        .align(Alignment.Center)
-                        .padding(24.dp),
-                )
+                state.error?.let { message ->
+                    Text(
+                        text = message,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier
+                            .align(Alignment.Center)
+                            .padding(24.dp),
+                    )
+                }
+
+                if (!state.isLoading && state.posts.isEmpty() && state.error == null) {
+                    Text(
+                        text = "No results. Try different tags.",
+                        modifier = Modifier
+                            .align(Alignment.Center)
+                            .padding(24.dp),
+                    )
+                }
             }
         }
     }
@@ -154,4 +187,3 @@ fun BrowserScreen(
         )
     }
 }
-

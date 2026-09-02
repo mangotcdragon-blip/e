@@ -2,6 +2,7 @@ package com.dailytools.calculator.data.network
 
 import retrofit2.http.GET
 import retrofit2.http.Query
+import retrofit2.http.Url
 
 /**
  * Rule34.xxx Danbooru-style API (https://rule34.xxx/index.php?page=help&topic=dapi).
@@ -18,7 +19,17 @@ interface Rule34Api {
         @Query("limit") limit: Int,
         @Query("pid") pid: Int,
     ): List<Rule34Post>?
+
+    // Rule34's autocomplete lives on the main domain rather than api.rule34.xxx,
+    // so this call takes a full absolute URL that overrides the client's base URL.
+    @GET
+    suspend fun autocompleteTags(@Url url: String): List<Rule34TagSuggestion>?
 }
+
+data class Rule34TagSuggestion(
+    val label: String?,
+    val value: String?,
+)
 
 data class Rule34Post(
     val id: Long,
