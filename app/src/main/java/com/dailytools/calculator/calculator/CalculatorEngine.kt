@@ -136,7 +136,7 @@ object CalculatorEngine {
         if (value == value.toLong().toDouble() && kotlin.math.abs(value) < 1e15) {
             return value.toLong().toString()
         }
-        val rounded = "%.8f".format(value).trimEnd('0').trimEnd('.')
+        val rounded = "%.8f".format(java.util.Locale.ROOT, value).trimEnd('0').trimEnd('.')
         return rounded.ifEmpty { "0" }
     }
 }

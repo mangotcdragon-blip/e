@@ -44,6 +44,7 @@ suspend fun downloadPost(context: Context, post: Post): Result<Unit> = withConte
             context.contentResolver.openOutputStream(uri)?.use { out ->
                 body.byteStream().copyTo(out)
             } ?: error("Could not open output stream")
+            Unit
         }
     }
 }
