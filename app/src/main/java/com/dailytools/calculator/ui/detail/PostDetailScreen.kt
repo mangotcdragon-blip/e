@@ -198,6 +198,8 @@ private fun rememberResolvedMediaUrl(
     val cachedFile = ExternalCache.cachedDecryptedFile(context, state.externalCacheTreeUri, post)
     if (cachedFile != null) {
         value = android.net.Uri.fromFile(cachedFile).toString()
+    } else {
+        // Only worth touching the drive again if we didn't already have a usable copy.
+        ExternalCache.cacheInBackground(context, state.externalCacheTreeUri, post, post.viewUrl)
     }
-    ExternalCache.cacheInBackground(context, state.externalCacheTreeUri, post, post.viewUrl)
 }

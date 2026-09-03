@@ -91,12 +91,15 @@ object ExternalCache {
     suspend fun cachedDecryptedFile(context: Context, treeUriString: String?, post: Post): File? =
         withContext(Dispatchers.IO) {
             runCatching {
-                val root = rootOrNull(context, treeUriString) ?: return@runCatching null
                 val fileName = obfuscatedFileName(post)
-                val doc = findCached(root, fileName) ?: return@runCatching null
-
                 val decryptedDir = File(context.cacheDir, DECRYPTED_DIR_NAME).apply { mkdirs() }
                 val outFile = File(decryptedDir, fileName)
+                // Already decrypted earlier this session (e.g. scrolled past and back) - reuse it
+                // rather than touching the drive again.
+                if (outFile.length() > 0) return@runCatching outFile
+
+                val root = rootOrNull(context, treeUriString) ?: return@runCatching null
+                val doc = findCached(root, fileName) ?: return@runCatching null
 
                 val decrypted = context.contentResolver.openInputStream(doc.uri)?.use { rawIn ->
                     val iv = ByteArray(GCM_IV_LENGTH)
@@ -132,12 +135,17 @@ object ExternalCache {
                 val fileName = obfuscatedFileName(post)
                 if (findCached(root, fileName) != null) return@runCatching
 
+                // Clean up a partial file from a previous interrupted attempt (app killed
+                // mid-download, drive pulled out, etc.) before starting a fresh one.
+                val tempName = "tmp_$fileName"
+                root.findFile(tempName)?.delete()
+
                 val request = Request.Builder().url(sourceUrl).header("User-Agent", "CalcGallery/1.0").build()
                 cacheHttpClient.newCall(request).execute().use { response ->
                     if (!response.isSuccessful) return@use
                     val body = response.body ?: return@use
                     // No real mime type on purpose - a bare, unrecognizable file.
-                    val doc = root.createFile("application/octet-stream", fileName) ?: return@use
+                    val doc = root.createFile("application/octet-stream", tempName) ?: return@use
                     context.contentResolver.openOutputStream(doc.uri)?.use { rawOut ->
                         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
                         cipher.init(Cipher.ENCRYPT_MODE, getOrCreateKey())
@@ -146,6 +154,10 @@ object ExternalCache {
                             body.byteStream().copyTo(encrypting)
                         }
                     }
+                    // Only becomes visible to findCached() - and therefore usable - once the
+                    // write above has fully succeeded, so a cut-off write can never be mistaken
+                    // for a good cache entry that then permanently blocks a retry.
+                    doc.renameTo(fileName)
                 }
             }
         }
