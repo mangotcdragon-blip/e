@@ -5,31 +5,30 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import com.dailytools.calculator.data.FavoritesStore
-import com.dailytools.calculator.ui.browser.BrowserViewModel
+import com.dailytools.calculator.data.SettingsStore
 import kotlinx.coroutines.launch
 
 @Composable
-fun PostDetailScreen(
-    viewModel: BrowserViewModel,
+fun LikedDetailScreen(
     favoritesStore: FavoritesStore,
+    settingsStore: SettingsStore,
     initialIndex: Int,
     onBack: () -> Unit,
     onLaunchingExternalActivity: () -> Unit,
 ) {
-    val state = viewModel.uiState
-    val likedIds by favoritesStore.likedIds.collectAsState(initial = emptySet())
+    val likedPosts by favoritesStore.likedPosts.collectAsState(initial = emptyList())
+    val cacheEnabled by settingsStore.externalCacheEnabled.collectAsState(initial = false)
+    val cacheTreeUri by settingsStore.externalCacheTreeUri.collectAsState(initial = null)
     val scope = rememberCoroutineScope()
 
     MediaViewerScreen(
-        posts = state.posts,
+        posts = likedPosts,
         initialIndex = initialIndex,
-        externalCacheEnabled = state.externalCacheEnabled,
-        externalCacheTreeUri = state.externalCacheTreeUri,
-        isLiked = { it.id in likedIds },
+        externalCacheEnabled = cacheEnabled,
+        externalCacheTreeUri = cacheTreeUri,
+        isLiked = { true },
         onToggleLike = { post -> scope.launch { favoritesStore.toggleLiked(post) } },
         onBack = onBack,
         onLaunchingExternalActivity = onLaunchingExternalActivity,
-        onPageSettled = { viewModel.setViewingPost(it.id) },
-        onNearEnd = { viewModel.loadMore() },
     )
 }

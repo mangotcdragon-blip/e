@@ -11,12 +11,15 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.dailytools.calculator.calculator.CalculatorScreen
 import com.dailytools.calculator.calculator.CalculatorViewModel
+import com.dailytools.calculator.data.FavoritesStore
 import com.dailytools.calculator.data.SettingsStore
 import com.dailytools.calculator.data.ThemeMode
 import com.dailytools.calculator.data.repo.BooruRepository
+import com.dailytools.calculator.ui.LikedScreen
 import com.dailytools.calculator.ui.SettingsScreen
 import com.dailytools.calculator.ui.browser.BrowserScreen
 import com.dailytools.calculator.ui.browser.BrowserViewModel
+import com.dailytools.calculator.ui.detail.LikedDetailScreen
 import com.dailytools.calculator.ui.detail.PostDetailScreen
 import com.dailytools.calculator.ui.theme.CalculatorTheme
 import com.dailytools.calculator.ui.theme.GalleryTheme
@@ -25,7 +28,9 @@ private sealed class Screen {
     data object Calculator : Screen()
     data object Browser : Screen()
     data object Settings : Screen()
+    data object Liked : Screen()
     data class Detail(val index: Int) : Screen()
+    data class LikedDetail(val index: Int) : Screen()
 }
 
 @Composable
@@ -34,6 +39,7 @@ fun AppRoot(
     onUnlock: () -> Unit,
     onLaunchingExternalActivity: () -> Unit,
     settingsStore: SettingsStore,
+    favoritesStore: FavoritesStore,
 ) {
     var screen by remember { mutableStateOf<Screen>(Screen.Calculator) }
     val themeMode by settingsStore.themeMode.collectAsState(initial = ThemeMode.DARK)
@@ -82,11 +88,13 @@ fun AppRoot(
             GalleryTheme(themeMode) {
                 BrowserScreen(
                     viewModel = browserViewModel,
+                    favoritesStore = favoritesStore,
                     onOpenPost = { index ->
                         browserViewModel.setInDetailMode(true)
                         screen = Screen.Detail(index)
                     },
                     onOpenSettings = { screen = Screen.Settings },
+                    onOpenLiked = { screen = Screen.Liked },
                 )
             }
         }
@@ -102,6 +110,17 @@ fun AppRoot(
             }
         }
 
+        Screen.Liked -> {
+            GalleryTheme(themeMode) {
+                BackHandler { screen = Screen.Browser }
+                LikedScreen(
+                    favoritesStore = favoritesStore,
+                    onOpenPost = { index -> screen = Screen.LikedDetail(index) },
+                    onBack = { screen = Screen.Browser },
+                )
+            }
+        }
+
         is Screen.Detail -> {
             GalleryTheme(themeMode) {
                 val exitDetail = {
@@ -111,8 +130,23 @@ fun AppRoot(
                 BackHandler(onBack = exitDetail)
                 PostDetailScreen(
                     viewModel = browserViewModel,
+                    favoritesStore = favoritesStore,
                     initialIndex = current.index,
                     onBack = exitDetail,
+                    onLaunchingExternalActivity = onLaunchingExternalActivity,
+                )
+            }
+        }
+
+        is Screen.LikedDetail -> {
+            GalleryTheme(themeMode) {
+                val exitLikedDetail = { screen = Screen.Liked }
+                BackHandler(onBack = exitLikedDetail)
+                LikedDetailScreen(
+                    favoritesStore = favoritesStore,
+                    settingsStore = settingsStore,
+                    initialIndex = current.index,
+                    onBack = exitLikedDetail,
                     onLaunchingExternalActivity = onLaunchingExternalActivity,
                 )
             }

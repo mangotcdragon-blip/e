@@ -8,12 +8,14 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import com.dailytools.calculator.data.FavoritesStore
 import com.dailytools.calculator.data.SettingsStore
 
 class MainActivity : ComponentActivity() {
 
     private var unlocked by mutableStateOf(false)
     private lateinit var settingsStore: SettingsStore
+    private lateinit var favoritesStore: FavoritesStore
 
     // Set right before launching a picker/share sheet of our own (folder picker, share intent)
     // so the resulting onStop doesn't re-lock the app before it gets its answer back.
@@ -22,6 +24,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         settingsStore = SettingsStore(applicationContext)
+        favoritesStore = FavoritesStore(applicationContext)
 
         setContent {
             LaunchedEffect(unlocked) {
@@ -36,6 +39,7 @@ class MainActivity : ComponentActivity() {
                 onUnlock = { unlocked = true },
                 onLaunchingExternalActivity = { suppressNextRelock = true },
                 settingsStore = settingsStore,
+                favoritesStore = favoritesStore,
             )
         }
     }

@@ -16,6 +16,7 @@ import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridS
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
@@ -32,10 +33,12 @@ import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
@@ -43,17 +46,23 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
+import com.dailytools.calculator.data.FavoritesStore
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun BrowserScreen(
     viewModel: BrowserViewModel,
+    favoritesStore: FavoritesStore,
     onOpenPost: (Int) -> Unit,
     onOpenSettings: () -> Unit,
+    onOpenLiked: () -> Unit,
 ) {
     val state = viewModel.uiState
+    val likedIds by favoritesStore.likedIds.collectAsState(initial = emptySet())
+    val scope = rememberCoroutineScope()
     var showFilters by remember { mutableStateOf(false) }
     val gridState = rememberLazyStaggeredGridState(
         initialFirstVisibleItemIndex = state.initialGridScrollIndex,
@@ -82,6 +91,9 @@ fun BrowserScreen(
             CenterAlignedTopAppBar(
                 title = { Text("Browse") },
                 actions = {
+                    IconButton(onClick = onOpenLiked) {
+                        Icon(Icons.Filled.Favorite, contentDescription = "Liked")
+                    }
                     IconButton(onClick = { showFilters = true }) {
                         Icon(Icons.Filled.FilterList, contentDescription = "Filters")
                     }
@@ -138,6 +150,8 @@ fun BrowserScreen(
                         PostThumbnail(
                             post = post,
                             onClick = { onOpenPost(index) },
+                            isLiked = post.id in likedIds,
+                            onToggleLike = { scope.launch { favoritesStore.toggleLiked(post) } },
                         )
                     }
                 }

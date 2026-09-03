@@ -8,10 +8,14 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -25,7 +29,13 @@ import com.dailytools.calculator.data.model.MediaKind
 import com.dailytools.calculator.data.model.Post
 
 @Composable
-fun PostThumbnail(post: Post, onClick: () -> Unit, modifier: Modifier = Modifier) {
+fun PostThumbnail(
+    post: Post,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    isLiked: Boolean = false,
+    onToggleLike: (() -> Unit)? = null,
+) {
     val ratio = post.aspectRatio.coerceIn(0.5f, 2f)
     Box(
         modifier = modifier
@@ -51,6 +61,24 @@ fun PostThumbnail(post: Post, onClick: () -> Unit, modifier: Modifier = Modifier
                     .size(36.dp)
                     .padding(4.dp),
             )
+        }
+        if (onToggleLike != null) {
+            IconButton(
+                onClick = onToggleLike,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(2.dp)
+                    .size(32.dp)
+                    .clip(CircleShape)
+                    .background(Color.Black.copy(alpha = 0.35f)),
+            ) {
+                Icon(
+                    imageVector = if (isLiked) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
+                    contentDescription = if (isLiked) "Unlike" else "Like",
+                    tint = if (isLiked) Color(0xFFFF5C8A) else Color.White,
+                    modifier = Modifier.size(18.dp),
+                )
+            }
         }
     }
 }
