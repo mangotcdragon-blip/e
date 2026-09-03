@@ -6,6 +6,8 @@ import coil.Coil
 import coil.ImageLoader
 import coil.decode.GifDecoder
 import coil.decode.ImageDecoderDecoder
+import com.dailytools.calculator.util.ExternalCache
+import java.io.File
 
 class GalleryApplication : Application() {
     override fun onCreate() {
@@ -20,5 +22,8 @@ class GalleryApplication : Application() {
             }
             .build()
         Coil.setImageLoader(imageLoader)
+
+        // Files decrypted from the external cache are only meant to live for one session.
+        File(cacheDir, ExternalCache.DECRYPTED_DIR_NAME).deleteRecursively()
     }
 }

@@ -46,9 +46,7 @@ import com.dailytools.calculator.ui.browser.BrowserUiState
 import com.dailytools.calculator.ui.browser.BrowserViewModel
 import com.dailytools.calculator.util.ExternalCache
 import com.dailytools.calculator.util.downloadPost
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -197,11 +195,9 @@ private fun rememberResolvedMediaUrl(
         value = post.viewUrl
         return@produceState
     }
-    val cached = withContext(Dispatchers.IO) {
-        ExternalCache.cachedUri(context, state.externalCacheTreeUri, post, post.viewUrl)
-    }
-    if (cached != null) {
-        value = cached.toString()
+    val cachedFile = ExternalCache.cachedDecryptedFile(context, state.externalCacheTreeUri, post)
+    if (cachedFile != null) {
+        value = android.net.Uri.fromFile(cachedFile).toString()
     }
     ExternalCache.cacheInBackground(context, state.externalCacheTreeUri, post, post.viewUrl)
 }
