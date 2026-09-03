@@ -32,6 +32,7 @@ private sealed class Screen {
 fun AppRoot(
     unlocked: Boolean,
     onUnlock: () -> Unit,
+    onLaunchingExternalActivity: () -> Unit,
     settingsStore: SettingsStore,
 ) {
     var screen by remember { mutableStateOf<Screen>(Screen.Calculator) }
@@ -93,7 +94,11 @@ fun AppRoot(
         Screen.Settings -> {
             GalleryTheme(themeMode) {
                 BackHandler { screen = Screen.Browser }
-                SettingsScreen(settingsStore = settingsStore, onBack = { screen = Screen.Browser })
+                SettingsScreen(
+                    settingsStore = settingsStore,
+                    onBack = { screen = Screen.Browser },
+                    onLaunchingExternalActivity = onLaunchingExternalActivity,
+                )
             }
         }
 
@@ -108,6 +113,7 @@ fun AppRoot(
                     viewModel = browserViewModel,
                     initialIndex = current.index,
                     onBack = exitDetail,
+                    onLaunchingExternalActivity = onLaunchingExternalActivity,
                 )
             }
         }

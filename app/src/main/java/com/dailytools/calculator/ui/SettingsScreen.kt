@@ -35,7 +35,11 @@ import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SettingsScreen(settingsStore: SettingsStore, onBack: () -> Unit) {
+fun SettingsScreen(
+    settingsStore: SettingsStore,
+    onBack: () -> Unit,
+    onLaunchingExternalActivity: () -> Unit,
+) {
     val themeMode by settingsStore.themeMode.collectAsState(initial = ThemeMode.DARK)
     val cacheEnabled by settingsStore.externalCacheEnabled.collectAsState(initial = false)
     val cacheTreeUri by settingsStore.externalCacheTreeUri.collectAsState(initial = null)
@@ -121,7 +125,10 @@ fun SettingsScreen(settingsStore: SettingsStore, onBack: () -> Unit) {
                     .padding(horizontal = 16.dp, vertical = 8.dp),
                 horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(12.dp),
             ) {
-                Button(onClick = { folderPicker.launch(null) }) {
+                Button(onClick = {
+                    onLaunchingExternalActivity()
+                    folderPicker.launch(null)
+                }) {
                     Text(if (cacheTreeUri == null) "Choose folder" else "Change folder")
                 }
                 if (cacheTreeUri != null) {

@@ -56,6 +56,7 @@ fun PostDetailScreen(
     viewModel: BrowserViewModel,
     initialIndex: Int,
     onBack: () -> Unit,
+    onLaunchingExternalActivity: () -> Unit,
 ) {
     val state = viewModel.uiState
     val posts = state.posts
@@ -88,6 +89,7 @@ fun PostDetailScreen(
                     val current = posts.getOrNull(pagerState.currentPage)
                     IconButton(onClick = {
                         current?.let {
+                            onLaunchingExternalActivity()
                             val intent = Intent(Intent.ACTION_SEND).apply {
                                 type = "text/plain"
                                 putExtra(Intent.EXTRA_TEXT, it.fileUrl)
