@@ -43,6 +43,26 @@ class SettingsStore(private val context: Context) {
         val GRID_SCROLL_INDEX = intPreferencesKey("grid_scroll_index")
         val LAST_POST_ID = stringPreferencesKey("last_post_id")
         val WAS_IN_DETAIL = booleanPreferencesKey("was_in_detail")
+        val EXTERNAL_CACHE_ENABLED = booleanPreferencesKey("external_cache_enabled")
+        val EXTERNAL_CACHE_TREE_URI = stringPreferencesKey("external_cache_tree_uri")
+    }
+
+    val externalCacheEnabled: Flow<Boolean> = context.dataStore.data.map { prefs ->
+        prefs[Keys.EXTERNAL_CACHE_ENABLED] ?: false
+    }
+
+    val externalCacheTreeUri: Flow<String?> = context.dataStore.data.map { prefs ->
+        prefs[Keys.EXTERNAL_CACHE_TREE_URI]
+    }
+
+    suspend fun setExternalCacheEnabled(enabled: Boolean) {
+        context.dataStore.edit { it[Keys.EXTERNAL_CACHE_ENABLED] = enabled }
+    }
+
+    suspend fun setExternalCacheTreeUri(treeUri: String?) {
+        context.dataStore.edit { prefs ->
+            if (treeUri == null) prefs.remove(Keys.EXTERNAL_CACHE_TREE_URI) else prefs[Keys.EXTERNAL_CACHE_TREE_URI] = treeUri
+        }
     }
 
     val themeMode: Flow<ThemeMode> = context.dataStore.data.map { prefs ->

@@ -15,6 +15,7 @@ import com.dailytools.calculator.data.model.SortOrder
 import com.dailytools.calculator.data.repo.BooruRepository
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
@@ -39,6 +40,8 @@ data class BrowserUiState(
     val lastViewedPostId: String? = null,
     val oneTimeRestoreIndex: Int? = null,
     val initialGridScrollIndex: Int = 0,
+    val externalCacheEnabled: Boolean = false,
+    val externalCacheTreeUri: String? = null,
 )
 
 class BrowserViewModel(
@@ -58,6 +61,13 @@ class BrowserViewModel(
                 restoreSession(session)
             } else {
                 refresh()
+            }
+        }
+        viewModelScope.launch {
+            settingsStore.externalCacheEnabled.combine(settingsStore.externalCacheTreeUri) { enabled, uri ->
+                enabled to uri
+            }.collect { (enabled, uri) ->
+                uiState = uiState.copy(externalCacheEnabled = enabled, externalCacheTreeUri = uri)
             }
         }
     }

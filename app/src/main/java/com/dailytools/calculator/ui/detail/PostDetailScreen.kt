@@ -31,6 +31,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -40,9 +41,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.dailytools.calculator.data.model.MediaKind
+import com.dailytools.calculator.data.model.Post
+import com.dailytools.calculator.ui.browser.BrowserUiState
 import com.dailytools.calculator.ui.browser.BrowserViewModel
+import com.dailytools.calculator.util.ExternalCache
 import com.dailytools.calculator.util.downloadPost
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -125,10 +131,11 @@ fun PostDetailScreen(
                 modifier = Modifier.weight(1f),
             ) { page ->
                 val post = posts[page]
+                val resolvedUrl by rememberResolvedMediaUrl(context, state, post)
                 when (post.mediaKind) {
-                    MediaKind.VIDEO -> VideoPlayerView(url = post.viewUrl, modifier = Modifier.fillMaxSize())
+                    MediaKind.VIDEO -> VideoPlayerView(url = resolvedUrl, modifier = Modifier.fillMaxSize())
                     else -> ZoomableImage(
-                        model = post.viewUrl,
+                        model = resolvedUrl,
                         contentDescription = null,
                         modifier = Modifier.fillMaxSize(),
                     )
@@ -170,4 +177,29 @@ fun PostDetailScreen(
             }
         }
     }
+}
+
+/**
+ * Resolves what to actually load for a post: an already-cached copy on the user's external
+ * drive if one exists, otherwise the normal network URL - while kicking off a background copy
+ * to that drive so it's cached for next time. Falls back to plain network loading whenever
+ * external caching is off, no folder is chosen, or anything about the drive goes wrong.
+ */
+@Composable
+private fun rememberResolvedMediaUrl(
+    context: android.content.Context,
+    state: BrowserUiState,
+    post: Post,
+) = produceState(initialValue = post.viewUrl, post.id, state.externalCacheEnabled, state.externalCacheTreeUri) {
+    if (!state.externalCacheEnabled) {
+        value = post.viewUrl
+        return@produceState
+    }
+    val cached = withContext(Dispatchers.IO) {
+        ExternalCache.cachedUri(context, state.externalCacheTreeUri, post, post.viewUrl)
+    }
+    if (cached != null) {
+        value = cached.toString()
+    }
+    ExternalCache.cacheInBackground(context, state.externalCacheTreeUri, post, post.viewUrl)
 }

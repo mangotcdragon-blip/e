@@ -78,5 +78,8 @@ dependencies {
     // Preferences
     implementation("androidx.datastore:datastore-preferences:1.1.1")
 
+    // External (OTG) storage folder access
+    implementation("androidx.documentfile:documentfile:1.0.1")
+
     debugImplementation("androidx.compose.ui:ui-tooling")
 }
