@@ -18,7 +18,9 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.ui.PlayerView
+import com.dailytools.calculator.data.network.VideoDataSource
 
 @Composable
 fun VideoPlayerView(url: String, modifier: Modifier = Modifier) {
@@ -31,8 +33,10 @@ fun VideoPlayerView(url: String, modifier: Modifier = Modifier) {
         val loadControl = DefaultLoadControl.Builder()
             .setBufferDurationsMs(5_000, 30_000, 500, 1_000)
             .build()
+        val mediaSourceFactory = DefaultMediaSourceFactory(VideoDataSource.factoryFor(context, url))
         ExoPlayer.Builder(context)
             .setLoadControl(loadControl)
+            .setMediaSourceFactory(mediaSourceFactory)
             .build()
             .apply {
                 setMediaItem(MediaItem.fromUri(url))
