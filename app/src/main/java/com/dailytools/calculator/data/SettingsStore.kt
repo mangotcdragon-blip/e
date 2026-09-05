@@ -45,6 +45,15 @@ class SettingsStore(private val context: Context) {
         val WAS_IN_DETAIL = booleanPreferencesKey("was_in_detail")
         val EXTERNAL_CACHE_ENABLED = booleanPreferencesKey("external_cache_enabled")
         val EXTERNAL_CACHE_TREE_URI = stringPreferencesKey("external_cache_tree_uri")
+        val FOR_YOU_ENABLED = booleanPreferencesKey("for_you_enabled")
+    }
+
+    val forYouEnabled: Flow<Boolean> = context.dataStore.data.map { prefs ->
+        prefs[Keys.FOR_YOU_ENABLED] ?: false
+    }
+
+    suspend fun setForYouEnabled(enabled: Boolean) {
+        context.dataStore.edit { it[Keys.FOR_YOU_ENABLED] = enabled }
     }
 
     val externalCacheEnabled: Flow<Boolean> = context.dataStore.data.map { prefs ->

@@ -198,6 +198,7 @@ fun BrowserScreen(
             onRatingChange = viewModel::setRating,
             onMediaTypeChange = viewModel::setMediaType,
             onSortChange = viewModel::setSort,
+            onForYouChange = viewModel::setForYouEnabled,
         )
     }
 }

@@ -5,6 +5,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.dailytools.calculator.data.FavoritesStore
 import com.dailytools.calculator.data.SessionState
 import com.dailytools.calculator.data.SettingsStore
 import com.dailytools.calculator.data.model.MediaTypeFilter
@@ -18,6 +19,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlin.random.Random
 
 /** Cap on how many pages we'll re-fetch on startup to rebuild a remembered position. */
 private const val MAX_RESTORE_PAGES = 10
@@ -42,11 +44,14 @@ data class BrowserUiState(
     val initialGridScrollIndex: Int = 0,
     val externalCacheEnabled: Boolean = false,
     val externalCacheTreeUri: String? = null,
+    val forYouEnabled: Boolean = false,
+    val forYouTag: String? = null,
 )
 
 class BrowserViewModel(
     private val repository: BooruRepository,
     private val settingsStore: SettingsStore,
+    private val favoritesStore: FavoritesStore,
 ) : ViewModel() {
 
     var uiState by mutableStateOf(BrowserUiState())
@@ -56,6 +61,8 @@ class BrowserViewModel(
 
     init {
         viewModelScope.launch {
+            val forYou = runCatching { settingsStore.forYouEnabled.first() }.getOrNull() ?: false
+            uiState = uiState.copy(forYouEnabled = forYou)
             val session = runCatching { settingsStore.sessionState.first() }.getOrNull()
             if (session != null && session.pagesLoaded > 0) {
                 restoreSession(session)
@@ -121,6 +128,14 @@ class BrowserViewModel(
         persistFiltersAndRefresh()
     }
 
+    /** "For You": swaps the manual search for a feed built from your liked posts' tags. */
+    fun setForYouEnabled(enabled: Boolean) {
+        if (enabled == uiState.forYouEnabled) return
+        uiState = uiState.copy(forYouEnabled = enabled, forYouTag = null)
+        viewModelScope.launch { settingsStore.setForYouEnabled(enabled) }
+        refresh()
+    }
+
     /** Marks whether the user is currently in the full-screen viewer, for resuming later. */
     fun setInDetailMode(inDetail: Boolean) {
         uiState = uiState.copy(wasInDetail = inDetail)
@@ -150,8 +165,44 @@ class BrowserViewModel(
             endReached = false,
             error = null,
         )
-        loadPage(append = false)
+        if (uiState.forYouEnabled) {
+            viewModelScope.launch {
+                uiState = uiState.copy(forYouTag = pickForYouTag())
+                loadPage(append = false)
+            }
+        } else {
+            loadPage(append = false)
+        }
     }
+
+    /** Tag frequency across everything liked, most-common first. */
+    private suspend fun computeForYouTags(): List<String> {
+        val liked = runCatching { favoritesStore.likedPosts.first() }.getOrElse { emptyList() }
+        if (liked.isEmpty()) return emptyList()
+        return liked.flatMap { it.tags }
+            .groupingBy { it }
+            .eachCount()
+            .entries
+            .sortedByDescending { it.value }
+            .take(10)
+            .map { it.key }
+    }
+
+    /** Weighted-random pick favoring your most-liked tags, so the feed varies but stays relevant. */
+    private suspend fun pickForYouTag(): String? {
+        val topTags = computeForYouTags()
+        if (topTags.isEmpty()) return null
+        val weights = topTags.indices.map { topTags.size - it }
+        var roll = Random.nextInt(weights.sum())
+        for (i in topTags.indices) {
+            roll -= weights[i]
+            if (roll < 0) return topTags[i]
+        }
+        return topTags.first()
+    }
+
+    private fun effectiveQuery(state: BrowserUiState): String =
+        if (state.forYouEnabled) state.forYouTag.orEmpty() else state.appliedQuery
 
     fun loadMore() {
         if (uiState.isLoading || uiState.isLoadingMore || uiState.endReached) return
@@ -175,7 +226,7 @@ class BrowserViewModel(
             runCatching {
                 repository.fetchPage(
                     source = snapshot.source,
-                    query = snapshot.appliedQuery,
+                    query = effectiveQuery(snapshot),
                     rating = snapshot.rating,
                     mediaType = snapshot.mediaType,
                     sort = snapshot.sort,
@@ -217,6 +268,9 @@ class BrowserViewModel(
             isLoading = true,
         )
         viewModelScope.launch {
+            if (uiState.forYouEnabled) {
+                uiState = uiState.copy(forYouTag = pickForYouTag())
+            }
             val targetPages = session.pagesLoaded.coerceIn(1, MAX_RESTORE_PAGES)
             val collected = mutableListOf<Post>()
             var reachedEnd = false
@@ -224,7 +278,7 @@ class BrowserViewModel(
                 val batch = runCatching {
                     repository.fetchPage(
                         source = uiState.source,
-                        query = uiState.appliedQuery,
+                        query = effectiveQuery(uiState),
                         rating = uiState.rating,
                         mediaType = uiState.mediaType,
                         sort = uiState.sort,
@@ -253,11 +307,11 @@ class BrowserViewModel(
     }
 
     companion object {
-        fun factory(repository: BooruRepository, settingsStore: SettingsStore) =
+        fun factory(repository: BooruRepository, settingsStore: SettingsStore, favoritesStore: FavoritesStore) =
             object : androidx.lifecycle.ViewModelProvider.Factory {
                 @Suppress("UNCHECKED_CAST")
                 override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T {
-                    return BrowserViewModel(repository, settingsStore) as T
+                    return BrowserViewModel(repository, settingsStore, favoritesStore) as T
                 }
             }
     }

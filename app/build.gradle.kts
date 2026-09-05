@@ -12,12 +12,25 @@ android {
         applicationId = "com.dailytools.calculator"
         minSdk = 24
         targetSdk = 35
-        versionCode = 1
+        versionCode = (project.findProperty("appVersionCode") as String?)?.toIntOrNull() ?: 1
         versionName = "1.0"
     }
 
+    signingConfigs {
+        create("release") {
+            storeFile = rootProject.file("keystore/release.keystore.jks")
+            storePassword = "CalcGallery2024Signing!"
+            keyAlias = "calcgallery"
+            keyPassword = "CalcGallery2024Signing!"
+        }
+    }
+
     buildTypes {
+        debug {
+            signingConfig = signingConfigs.getByName("release")
+        }
         release {
+            signingConfig = signingConfigs.getByName("release")
             isMinifyEnabled = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),

@@ -48,7 +48,7 @@ fun AppRoot(
     // in-flight restore-from-disk fetch) survives every re-lock, not just navigation.
     val repository = remember { BooruRepository() }
     val browserViewModel: BrowserViewModel = viewModel(
-        factory = BrowserViewModel.factory(repository, settingsStore),
+        factory = BrowserViewModel.factory(repository, settingsStore, favoritesStore),
     )
 
     LaunchedEffect(unlocked) {
