@@ -24,6 +24,37 @@ import kotlin.random.Random
 /** Cap on how many pages we'll re-fetch on startup to rebuild a remembered position. */
 private const val MAX_RESTORE_PAGES = 10
 
+/**
+ * Tags that show up on nearly every post regardless of subject (anatomy, pose, media/quality,
+ * background, generic meta). Left in, these always win a raw frequency count and "For You" ends
+ * up searching for e.g. "solo" or "hi_res" instead of anything about what was actually liked.
+ */
+private val GENERIC_TAG_STOPLIST = setOf(
+    "solo", "duo", "group", "trio", "male", "female", "male/male", "female/female", "male/female",
+    "straight", "gay", "lesbian", "bisexual_(lore)", "intersex", "intersex_(lore)", "ambiguous_gender",
+    "humanoid", "human", "anthro", "feral", "taur",
+    "penis", "pussy", "vagina", "anus", "balls", "testicles", "nipples", "breasts", "big_breasts",
+    "huge_breasts", "small_breasts", "big_butt", "huge_butt", "butt", "thighs", "thick_thighs",
+    "nude", "clothed", "clothing", "topwear", "bottomwear", "underwear", "cum", "cum_inside",
+    "cumshot", "sex", "penetration", "vaginal", "vaginal_penetration", "anal", "anal_penetration",
+    "oral", "oral_sex", "fellatio", "masturbation", "handjob", "blowjob", "knot", "knotting",
+    "sheath", "presenting", "spread_legs", "spreading", "on_back", "from_behind", "doggystyle",
+    "missionary_position", "animal_genitalia", "genital_fluids",
+    "digital_media_(artwork)", "traditional_media_(artwork)", "hi_res", "absurd_res", "high_res",
+    "low_res", "thumbnail", "photography_(artwork)", "3d_(artwork)", "pixel_(artwork)", "animated",
+    "sound", "webm", "mp4", "loop",
+    "simple_background", "detailed_background", "white_background", "black_background",
+    "gradient_background", "transparent_background", "outside", "inside", "day", "night",
+    "looking_at_viewer", "looking_pleasured", "smile", "open_mouth", "tongue", "tongue_out",
+    "teeth", "blush", "eyes_closed", "closed_eyes", "standing", "sitting", "lying", "on_side",
+    "muscular", "overweight", "obese", "thick_bodied", "slim", "skinny", "young", "tail", "wings",
+    "horn", "horns", "claws", "fur", "scales", "feathers", "ears", "whiskers", "spots", "stripes",
+    "text", "english_text", "dialogue", "speech_bubble", "watermark", "signature", "artist_name",
+    "patreon_username", "conditional_dnp", "source_request", "avoid_posting", "comic",
+)
+
+private val YEAR_TAG_REGEX = Regex("^(19|20)\\d{2}$")
+
 data class BrowserUiState(
     val source: Source = Source.E621,
     val queryInput: String = "",
@@ -175,11 +206,15 @@ class BrowserViewModel(
         }
     }
 
-    /** Tag frequency across everything liked, most-common first. */
+    /** Tag frequency across everything liked, most-common first, generic tags filtered out. */
     private suspend fun computeForYouTags(): List<String> {
         val liked = runCatching { favoritesStore.likedPosts.first() }.getOrElse { emptyList() }
         if (liked.isEmpty()) return emptyList()
-        return liked.flatMap { it.tags }
+        val allTags = liked.flatMap { it.tags }
+        val distinctive = allTags.filterNot { it.lowercase() in GENERIC_TAG_STOPLIST || YEAR_TAG_REGEX.matches(it) }
+        // If literally everything liked was only tagged with generic stuff, fall back rather than return nothing.
+        val pool = distinctive.ifEmpty { allTags }
+        return pool
             .groupingBy { it }
             .eachCount()
             .entries
