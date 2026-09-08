@@ -7,6 +7,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -39,7 +40,7 @@ private class FastFailLoadErrorHandlingPolicy : DefaultLoadErrorHandlingPolicy()
 }
 
 @Composable
-fun VideoPlayerView(url: String, modifier: Modifier = Modifier) {
+fun VideoPlayerView(url: String, isActive: Boolean = true, modifier: Modifier = Modifier) {
     val context = LocalContext.current
     var isBuffering by remember(url) { mutableStateOf(true) }
     var hasError by remember(url) { mutableStateOf(false) }
@@ -60,9 +61,19 @@ fun VideoPlayerView(url: String, modifier: Modifier = Modifier) {
             .apply {
                 setMediaItem(MediaItem.fromUri(url))
                 repeatMode = Player.REPEAT_MODE_ONE
-                playWhenReady = true
+                // Always prepare so an off-screen, pre-loaded neighbor page (see
+                // beyondViewportPageCount in MediaViewerScreen) starts buffering immediately -
+                // but only the active page is actually allowed to play or make sound, kept in
+                // sync below for as long as this same instance lives across page transitions.
+                volume = if (isActive) 1f else 0f
+                playWhenReady = isActive
                 prepare()
             }
+    }
+
+    LaunchedEffect(isActive, exoPlayer) {
+        exoPlayer.playWhenReady = isActive
+        exoPlayer.volume = if (isActive) 1f else 0f
     }
 
     DisposableEffect(exoPlayer) {

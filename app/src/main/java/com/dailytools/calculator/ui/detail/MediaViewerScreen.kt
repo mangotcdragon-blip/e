@@ -149,11 +149,22 @@ fun MediaViewerScreen(
             VerticalPager(
                 state = pagerState,
                 modifier = Modifier.weight(1f),
+                // Keeps the next (and previous) post composed ahead of time instead of only the
+                // one on screen, so its image/video starts fetching and buffering *while still
+                // viewing the current post* - by the time you swipe, it's often already there.
+                // This is the same look-ahead idea feeds like YouTube/TikTok rely on; it can't
+                // make e621/Rule34's own servers faster, but it hides most of that latency behind
+                // however long you spend on the post before it.
+                beyondViewportPageCount = 1,
             ) { page ->
                 val post = posts[page]
                 val resolvedUrl by rememberResolvedMediaUrl(context, externalCacheEnabled, externalCacheTreeUri, post)
                 when (post.mediaKind) {
-                    MediaKind.VIDEO -> VideoPlayerView(url = resolvedUrl, modifier = Modifier.fillMaxSize())
+                    MediaKind.VIDEO -> VideoPlayerView(
+                        url = resolvedUrl,
+                        isActive = page == pagerState.currentPage,
+                        modifier = Modifier.fillMaxSize(),
+                    )
                     else -> ZoomableImage(
                         model = resolvedUrl,
                         contentDescription = null,
