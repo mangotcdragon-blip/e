@@ -1,5 +1,9 @@
 package com.dailytools.calculator.ui.detail
 
+import android.content.ActivityNotFoundException
+import android.content.Intent
+import android.net.Uri
+import android.widget.Toast
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -29,6 +33,20 @@ import androidx.media3.ui.PlayerView
 import com.dailytools.calculator.data.network.VideoDataSource
 
 /**
+ * Error codes ExoPlayer uses for "the file/codec itself is the problem," as opposed to a network
+ * hiccup. Retrying does nothing for these - the device's decoder genuinely can't handle the
+ * format (e.g. AV1, which some phones lack hardware support for) - so they get a different
+ * message and action than a transient load failure.
+ */
+private val UNSUPPORTED_FORMAT_ERROR_CODES = setOf(
+    PlaybackException.ERROR_CODE_DECODER_INIT_FAILED,
+    PlaybackException.ERROR_CODE_DECODER_QUERY_FAILED,
+    PlaybackException.ERROR_CODE_DECODING_FAILED,
+    PlaybackException.ERROR_CODE_DECODING_FORMAT_EXCEEDS_CAPABILITIES,
+    PlaybackException.ERROR_CODE_DECODING_FORMAT_UNSUPPORTED,
+)
+
+/**
  * ExoPlayer's default error-handling policy retries a stalled/misbehaving connection many times
  * with growing backoff before finally giving up - on a genuinely bad connection that can add up
  * to several minutes of silent "buffering" with nothing on screen to explain it. This still gives
@@ -41,10 +59,17 @@ private class FastFailLoadErrorHandlingPolicy : DefaultLoadErrorHandlingPolicy()
 }
 
 @Composable
-fun VideoPlayerView(url: String, isActive: Boolean = true, modifier: Modifier = Modifier) {
+fun VideoPlayerView(
+    url: String,
+    networkUrl: String = url,
+    isActive: Boolean = true,
+    onLaunchingExternalActivity: () -> Unit = {},
+    modifier: Modifier = Modifier,
+) {
     val context = LocalContext.current
     var isBuffering by remember(url) { mutableStateOf(true) }
     var hasError by remember(url) { mutableStateOf(false) }
+    var isUnsupportedFormat by remember(url) { mutableStateOf(false) }
     var retryToken by remember(url) { mutableIntStateOf(0) }
 
     val exoPlayer = remember(url, retryToken) {
@@ -79,6 +104,7 @@ fun VideoPlayerView(url: String, isActive: Boolean = true, modifier: Modifier = 
 
     DisposableEffect(exoPlayer) {
         hasError = false
+        isUnsupportedFormat = false
         val listener = object : Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) {
                 isBuffering = playbackState == Player.STATE_BUFFERING
@@ -87,6 +113,7 @@ fun VideoPlayerView(url: String, isActive: Boolean = true, modifier: Modifier = 
             override fun onPlayerError(error: PlaybackException) {
                 isBuffering = false
                 hasError = true
+                isUnsupportedFormat = error.errorCode in UNSUPPORTED_FORMAT_ERROR_CODES
             }
         }
         exoPlayer.addListener(listener)
@@ -116,7 +143,26 @@ fun VideoPlayerView(url: String, isActive: Boolean = true, modifier: Modifier = 
                 modifier = Modifier.align(Alignment.Center),
             )
         }
-        if (hasError) {
+        if (hasError && isUnsupportedFormat) {
+            Text(
+                text = "This device can't play this video's format - tap to open in another app",
+                color = Color.White,
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .clickable {
+                        onLaunchingExternalActivity()
+                        val intent = Intent(Intent.ACTION_VIEW).apply {
+                            setDataAndType(Uri.parse(networkUrl), "video/*")
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        }
+                        try {
+                            context.startActivity(Intent.createChooser(intent, null))
+                        } catch (e: ActivityNotFoundException) {
+                            Toast.makeText(context, "No app found to play this video", Toast.LENGTH_SHORT).show()
+                        }
+                    },
+            )
+        } else if (hasError) {
             Text(
                 text = "Couldn't load video - tap to retry",
                 color = Color.White,
