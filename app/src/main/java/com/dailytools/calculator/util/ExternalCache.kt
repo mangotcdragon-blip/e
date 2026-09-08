@@ -8,6 +8,7 @@ import androidx.documentfile.provider.DocumentFile
 import com.dailytools.calculator.data.model.Post
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.File
@@ -89,36 +90,41 @@ object ExternalCache {
      * isn't cached (yet) or anything about the drive/key goes wrong.
      */
     suspend fun cachedDecryptedFile(context: Context, treeUriString: String?, post: Post): File? =
-        withContext(Dispatchers.IO) {
-            runCatching {
-                val fileName = obfuscatedFileName(post)
-                val decryptedDir = File(context.cacheDir, DECRYPTED_DIR_NAME).apply { mkdirs() }
-                val outFile = File(decryptedDir, fileName)
-                // Already decrypted earlier this session (e.g. scrolled past and back) - reuse it
-                // rather than touching the drive again.
-                if (outFile.length() > 0) return@runCatching outFile
+        // A disconnected/sleeping USB drive can leave a SAF call (canRead/listFiles) hanging far
+        // longer than any real cache lookup should take, so this is bounded rather than left to
+        // block indefinitely - falling back to null (plain network playback) if it ever fires.
+        withTimeoutOrNull(8_000) {
+            withContext(Dispatchers.IO) {
+                runCatching {
+                    val fileName = obfuscatedFileName(post)
+                    val decryptedDir = File(context.cacheDir, DECRYPTED_DIR_NAME).apply { mkdirs() }
+                    val outFile = File(decryptedDir, fileName)
+                    // Already decrypted earlier this session (e.g. scrolled past and back) - reuse it
+                    // rather than touching the drive again.
+                    if (outFile.length() > 0) return@runCatching outFile
 
-                val root = rootOrNull(context, treeUriString) ?: return@runCatching null
-                val doc = findCached(root, fileName) ?: return@runCatching null
+                    val root = rootOrNull(context, treeUriString) ?: return@runCatching null
+                    val doc = findCached(root, fileName) ?: return@runCatching null
 
-                val decrypted = context.contentResolver.openInputStream(doc.uri)?.use { rawIn ->
-                    val iv = ByteArray(GCM_IV_LENGTH)
-                    var offset = 0
-                    while (offset < GCM_IV_LENGTH) {
-                        val read = rawIn.read(iv, offset, GCM_IV_LENGTH - offset)
-                        if (read == -1) return@use false
-                        offset += read
-                    }
-                    val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-                    cipher.init(Cipher.DECRYPT_MODE, getOrCreateKey(), GCMParameterSpec(GCM_TAG_LENGTH_BITS, iv))
-                    CipherInputStream(rawIn, cipher).use { plaintext ->
-                        FileOutputStream(outFile).use { out -> plaintext.copyTo(out) }
-                    }
-                    true
-                } ?: false
+                    val decrypted = context.contentResolver.openInputStream(doc.uri)?.use { rawIn ->
+                        val iv = ByteArray(GCM_IV_LENGTH)
+                        var offset = 0
+                        while (offset < GCM_IV_LENGTH) {
+                            val read = rawIn.read(iv, offset, GCM_IV_LENGTH - offset)
+                            if (read == -1) return@use false
+                            offset += read
+                        }
+                        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+                        cipher.init(Cipher.DECRYPT_MODE, getOrCreateKey(), GCMParameterSpec(GCM_TAG_LENGTH_BITS, iv))
+                        CipherInputStream(rawIn, cipher).use { plaintext ->
+                            FileOutputStream(outFile).use { out -> plaintext.copyTo(out) }
+                        }
+                        true
+                    } ?: false
 
-                if (decrypted) outFile else null
-            }.getOrNull()
+                    if (decrypted) outFile else null
+                }.getOrNull()
+            }
         }
 
     /**
@@ -128,36 +134,41 @@ object ExternalCache {
      * space, or permission was lost.
      */
     suspend fun cacheInBackground(context: Context, treeUriString: String?, post: Post, sourceUrl: String) {
-        withContext(Dispatchers.IO) {
-            runCatching {
-                val root = rootOrNull(context, treeUriString) ?: return@runCatching
-                if (!root.canWrite()) return@runCatching
-                val fileName = obfuscatedFileName(post)
-                if (findCached(root, fileName) != null) return@runCatching
+        // Same reasoning as cachedDecryptedFile's timeout: a disconnected/sleeping drive must
+        // never be able to hang this - it's best-effort caching, not something worth blocking on.
+        // Generous compared to that lookup since this one actually transfers the whole file.
+        withTimeoutOrNull(60_000) {
+            withContext(Dispatchers.IO) {
+                runCatching {
+                    val root = rootOrNull(context, treeUriString) ?: return@runCatching
+                    if (!root.canWrite()) return@runCatching
+                    val fileName = obfuscatedFileName(post)
+                    if (findCached(root, fileName) != null) return@runCatching
 
-                // Clean up a partial file from a previous interrupted attempt (app killed
-                // mid-download, drive pulled out, etc.) before starting a fresh one.
-                val tempName = "tmp_$fileName"
-                root.findFile(tempName)?.delete()
+                    // Clean up a partial file from a previous interrupted attempt (app killed
+                    // mid-download, drive pulled out, etc.) before starting a fresh one.
+                    val tempName = "tmp_$fileName"
+                    root.findFile(tempName)?.delete()
 
-                val request = Request.Builder().url(sourceUrl).header("User-Agent", "CalcGallery/1.0").build()
-                cacheHttpClient.newCall(request).execute().use { response ->
-                    if (!response.isSuccessful) return@use
-                    val body = response.body ?: return@use
-                    // No real mime type on purpose - a bare, unrecognizable file.
-                    val doc = root.createFile("application/octet-stream", tempName) ?: return@use
-                    context.contentResolver.openOutputStream(doc.uri)?.use { rawOut ->
-                        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-                        cipher.init(Cipher.ENCRYPT_MODE, getOrCreateKey())
-                        rawOut.write(cipher.iv)
-                        CipherOutputStream(rawOut, cipher).use { encrypting ->
-                            body.byteStream().copyTo(encrypting)
+                    val request = Request.Builder().url(sourceUrl).header("User-Agent", "CalcGallery/1.0").build()
+                    cacheHttpClient.newCall(request).execute().use { response ->
+                        if (!response.isSuccessful) return@use
+                        val body = response.body ?: return@use
+                        // No real mime type on purpose - a bare, unrecognizable file.
+                        val doc = root.createFile("application/octet-stream", tempName) ?: return@use
+                        context.contentResolver.openOutputStream(doc.uri)?.use { rawOut ->
+                            val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+                            cipher.init(Cipher.ENCRYPT_MODE, getOrCreateKey())
+                            rawOut.write(cipher.iv)
+                            CipherOutputStream(rawOut, cipher).use { encrypting ->
+                                body.byteStream().copyTo(encrypting)
+                            }
                         }
+                        // Only becomes visible to findCached() - and therefore usable - once the
+                        // write above has fully succeeded, so a cut-off write can never be mistaken
+                        // for a good cache entry that then permanently blocks a retry.
+                        doc.renameTo(fileName)
                     }
-                    // Only becomes visible to findCached() - and therefore usable - once the
-                    // write above has fully succeeded, so a cut-off write can never be mistaken
-                    // for a good cache entry that then permanently blocks a retry.
-                    doc.renameTo(fileName)
                 }
             }
         }
