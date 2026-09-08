@@ -268,8 +268,18 @@ class BrowserViewModel(
                     pageIndex = requestedPage,
                 )
             }.onSuccess { newPosts ->
+                // e621/Rule34 pagination isn't perfectly stable across requests (ties in sort
+                // order shifting, off-by-one overlaps, etc.), so the same post can come back on
+                // more than one "page" - drop anything already on screen instead of showing it
+                // twice as you scroll.
+                val deduped = if (append) {
+                    val existingIds = uiState.posts.mapTo(HashSet()) { it.id }
+                    newPosts.filterNot { it.id in existingIds }
+                } else {
+                    newPosts
+                }
                 uiState = uiState.copy(
-                    posts = if (append) uiState.posts + newPosts else newPosts,
+                    posts = if (append) uiState.posts + deduped else deduped,
                     isLoading = false,
                     isLoadingMore = false,
                     endReached = newPosts.isEmpty(),
@@ -308,6 +318,7 @@ class BrowserViewModel(
             }
             val targetPages = session.pagesLoaded.coerceIn(1, MAX_RESTORE_PAGES)
             val collected = mutableListOf<Post>()
+            val collectedIds = HashSet<String>()
             var reachedEnd = false
             for (p in 0 until targetPages) {
                 val batch = runCatching {
@@ -324,7 +335,10 @@ class BrowserViewModel(
                     reachedEnd = true
                     break
                 }
-                collected += batch
+                // Same overlap-across-pages issue as loadPage() - drop anything already collected.
+                for (post in batch) {
+                    if (collectedIds.add(post.id)) collected += post
+                }
             }
             val restoreIndex = if (session.wasInDetail && session.lastPostId != null) {
                 collected.indexOfFirst { it.id == session.lastPostId }.takeIf { it >= 0 }

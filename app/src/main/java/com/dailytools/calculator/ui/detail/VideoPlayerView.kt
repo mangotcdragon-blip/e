@@ -31,12 +31,13 @@ import com.dailytools.calculator.data.network.VideoDataSource
 /**
  * ExoPlayer's default error-handling policy retries a stalled/misbehaving connection many times
  * with growing backoff before finally giving up - on a genuinely bad connection that can add up
- * to several minutes of silent "buffering" with nothing on screen to explain it. This gives up
- * after a couple of quick attempts instead, so a real failure surfaces (and can be retried) in
- * seconds, not minutes.
+ * to several minutes of silent "buffering" with nothing on screen to explain it. This still gives
+ * up eventually so a truly dead connection surfaces (and can be retried) rather than hanging
+ * forever, but allows enough attempts that an ordinary dropped connection or brief server hiccup -
+ * common on smaller sites like these - can recover on its own instead of immediately erroring out.
  */
 private class FastFailLoadErrorHandlingPolicy : DefaultLoadErrorHandlingPolicy() {
-    override fun getMinimumLoadableRetryCount(dataType: Int): Int = 1
+    override fun getMinimumLoadableRetryCount(dataType: Int): Int = 4
 }
 
 @Composable
