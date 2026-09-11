@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="touchpad_surface">#FF1B1D22</color>
+    <color name="touchpad_border">#FF31343C</color>
+    <color name="touchpad_hint">#FF9BA1AC</color>
+    <color name="touchpad_touch">#4D7C93FF</color>
+</resources>

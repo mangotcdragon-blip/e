@@ -1,0 +1,3 @@
+# Windows needs nothing: the server drives SendInput through ctypes.
+# macOS and Linux use pynput.
+pynput>=1.7.6; sys_platform != "win32"

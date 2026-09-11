@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="brand">#3E63DD</color>
+    <color name="brand_dark">#2A46A8</color>
+    <color name="on_brand">#FFFFFFFF</color>
+
+    <color name="touchpad_surface">#FFF1F3F9</color>
+    <color name="touchpad_border">#FFD3D9E6</color>
+    <color name="touchpad_hint">#FF6B7280</color>
+    <color name="touchpad_touch">#333E63DD</color>
+
+    <color name="status_connected">#FF1DA462</color>
+    <color name="status_pending">#FFE0A21A</color>
+    <color name="status_offline">#FF9AA1AE</color>
+    <color name="status_error">#FFDC3D43</color>
+</resources>

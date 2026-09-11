@@ -1,0 +1,170 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="?attr/colorSurface"
+    android:orientation="vertical">
+
+    <com.google.android.material.appbar.MaterialToolbar
+        android:id="@+id/toolbar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="?attr/colorSurface"
+        app:navigationIcon="?attr/homeAsUpIndicator"
+        app:title="@string/settings"
+        app:titleTextColor="?attr/colorOnSurface" />
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:fillViewport="true">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingStart="20dp"
+            android:paddingTop="8dp"
+            android:paddingEnd="20dp"
+            android:paddingBottom="24dp">
+
+            <TextView
+                style="@style/SectionHeading"
+                android:text="@string/settings_connection" />
+
+            <com.google.android.material.textfield.TextInputLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="@string/settings_host">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/hostInput"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:inputType="textUri"
+                    android:maxLines="1" />
+            </com.google.android.material.textfield.TextInputLayout>
+
+            <com.google.android.material.textfield.TextInputLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:hint="@string/settings_port">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/portInput"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:inputType="number"
+                    android:maxLines="1" />
+            </com.google.android.material.textfield.TextInputLayout>
+
+            <com.google.android.material.textfield.TextInputLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:hint="@string/settings_token">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/tokenInput"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:inputType="text"
+                    android:maxLines="1" />
+            </com.google.android.material.textfield.TextInputLayout>
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/findButton"
+                style="@style/Widget.Material3.Button.OutlinedButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:text="@string/find_pc" />
+
+            <TextView
+                style="@style/SectionHeading"
+                android:text="@string/settings_pointer" />
+
+            <TextView
+                android:id="@+id/sensitivityLabel"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textAppearance="?attr/textAppearanceBodyMedium" />
+
+            <com.google.android.material.slider.Slider
+                android:id="@+id/sensitivitySlider"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:stepSize="0.1"
+                android:valueFrom="0.4"
+                android:valueTo="4.0" />
+
+            <TextView
+                android:id="@+id/scrollLabel"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textAppearance="?attr/textAppearanceBodyMedium" />
+
+            <com.google.android.material.slider.Slider
+                android:id="@+id/scrollSlider"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:stepSize="0.1"
+                android:valueFrom="0.2"
+                android:valueTo="4.0" />
+
+            <com.google.android.material.materialswitch.MaterialSwitch
+                android:id="@+id/accelerationSwitch"
+                style="@style/SettingSwitch"
+                android:text="@string/settings_acceleration" />
+
+            <TextView
+                style="@style/SettingSummary"
+                android:text="@string/settings_acceleration_summary" />
+
+            <com.google.android.material.materialswitch.MaterialSwitch
+                android:id="@+id/naturalScrollSwitch"
+                style="@style/SettingSwitch"
+                android:text="@string/settings_natural_scroll" />
+
+            <TextView
+                style="@style/SettingSummary"
+                android:text="@string/settings_natural_scroll_summary" />
+
+            <TextView
+                style="@style/SectionHeading"
+                android:text="@string/settings_behaviour" />
+
+            <com.google.android.material.materialswitch.MaterialSwitch
+                android:id="@+id/tapToClickSwitch"
+                style="@style/SettingSwitch"
+                android:text="@string/settings_tap_to_click" />
+
+            <com.google.android.material.materialswitch.MaterialSwitch
+                android:id="@+id/hapticsSwitch"
+                style="@style/SettingSwitch"
+                android:text="@string/settings_haptics" />
+
+            <com.google.android.material.materialswitch.MaterialSwitch
+                android:id="@+id/keepAwakeSwitch"
+                style="@style/SettingSwitch"
+                android:text="@string/settings_keep_screen_on" />
+
+            <com.google.android.material.materialswitch.MaterialSwitch
+                android:id="@+id/autoConnectSwitch"
+                style="@style/SettingSwitch"
+                android:text="@string/settings_auto_connect" />
+
+            <com.google.android.material.materialswitch.MaterialSwitch
+                android:id="@+id/resendSwitch"
+                style="@style/SettingSwitch"
+                android:text="@string/settings_resend" />
+
+            <TextView
+                style="@style/SettingSummary"
+                android:text="@string/settings_resend_summary" />
+        </LinearLayout>
+    </ScrollView>
+</LinearLayout>

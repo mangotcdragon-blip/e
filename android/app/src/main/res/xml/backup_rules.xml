@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The connection details are worth restoring onto a new phone. -->
+<full-backup-content>
+    <include domain="sharedpref" path="wifimouse.xml" />
+</full-backup-content>
