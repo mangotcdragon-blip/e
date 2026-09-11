@@ -172,8 +172,9 @@ class MainActivity : AppCompatActivity(), TouchpadView.Listener {
             .show()
 
         Discovery.search(settings.port) { servers ->
-            dialog.dismiss()
+            // The search outlives the screen if the user backs out mid-way.
             if (isFinishing || isDestroyed) return@search
+            dialog.dismiss()
             if (servers.isEmpty()) {
                 AlertDialog.Builder(this)
                     .setTitle(R.string.find_pc)
@@ -183,7 +184,7 @@ class MainActivity : AppCompatActivity(), TouchpadView.Listener {
                 return@search
             }
             if (servers.size == 1) {
-                use(servers.first())
+                useServer(servers.first())
                 return@search
             }
             val labels = servers
@@ -191,13 +192,13 @@ class MainActivity : AppCompatActivity(), TouchpadView.Listener {
                 .toTypedArray()
             AlertDialog.Builder(this)
                 .setTitle(R.string.choose_pc)
-                .setItems(labels) { _, index -> use(servers[index]) }
+                .setItems(labels) { _, index -> useServer(servers[index]) }
                 .setNegativeButton(R.string.cancel, null)
                 .show()
         }
     }
 
-    private fun use(server: Protocol.ServerInfo) {
+    private fun useServer(server: Protocol.ServerInfo) {
         settings.host = server.host
         settings.port = server.port
         if (server.needsToken && settings.token.isEmpty()) {

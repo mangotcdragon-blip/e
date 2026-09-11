@@ -52,7 +52,11 @@ class SettingsActivity : AppCompatActivity() {
         saveTextFields()
     }
 
-    private fun saveTextFields() {
+    /**
+     * @param showErrors whether a bad port may raise a dialog. It may not while
+     *   the screen is going away, which is where onPause() calls this from.
+     */
+    private fun saveTextFields(showErrors: Boolean = false) {
         settings.host = binding.hostInput.text?.toString()?.trim().orEmpty()
         settings.token = binding.tokenInput.text?.toString()?.trim().orEmpty()
 
@@ -63,7 +67,7 @@ class SettingsActivity : AppCompatActivity() {
         } else {
             // Keep the stored port rather than silently writing a broken one.
             binding.portInput.setText(settings.port.toString())
-            if (typed.isNotEmpty()) {
+            if (showErrors && typed.isNotEmpty()) {
                 AlertDialog.Builder(this)
                     .setMessage(R.string.invalid_port)
                     .setPositiveButton(R.string.ok, null)
@@ -89,15 +93,16 @@ class SettingsActivity : AppCompatActivity() {
     }
 
     private fun discover() {
-        saveTextFields()
+        saveTextFields(showErrors = true)
         val dialog = AlertDialog.Builder(this)
             .setTitle(R.string.find_pc)
             .setMessage(R.string.searching)
             .show()
 
         Discovery.search(settings.port) { servers ->
-            dialog.dismiss()
+            // The search outlives the screen if the user backs out mid-way.
             if (isFinishing || isDestroyed) return@search
+            dialog.dismiss()
             if (servers.isEmpty()) {
                 AlertDialog.Builder(this)
                     .setTitle(R.string.find_pc)
@@ -111,13 +116,13 @@ class SettingsActivity : AppCompatActivity() {
                 .toTypedArray()
             AlertDialog.Builder(this)
                 .setTitle(R.string.choose_pc)
-                .setItems(labels) { _, index -> apply(servers[index]) }
+                .setItems(labels) { _, index -> useServer(servers[index]) }
                 .setNegativeButton(R.string.cancel, null)
                 .show()
         }
     }
 
-    private fun apply(server: Protocol.ServerInfo) {
+    private fun useServer(server: Protocol.ServerInfo) {
         settings.host = server.host
         settings.port = server.port
         binding.hostInput.setText(server.host)
