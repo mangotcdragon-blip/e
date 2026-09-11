@@ -10,7 +10,7 @@ from __future__ import annotations
 import ctypes
 import platform
 import sys
-from typing import Optional, Tuple
+from typing import Tuple
 
 from .protocol import ProtocolError
 
