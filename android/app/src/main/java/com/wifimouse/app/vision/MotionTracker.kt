@@ -54,8 +54,11 @@ class MotionTracker(private val width: Int, private val height: Int) {
     private val fineScores = FloatArray(FINE_WINDOW * FINE_WINDOW)
 
     init {
-        require(width > 4 * MAX_SHIFT && height > 4 * MAX_SHIFT) {
-            "frame $width x $height is too small to track ±$MAX_SHIFT pixels"
+        // The patch is inset by MAX_SHIFT on every side so the search can never
+        // read outside the buffer; what is left has to be big enough to match on.
+        val smallest = 2 * MAX_SHIFT + MIN_PATCH
+        require(width >= smallest && height >= smallest) {
+            "frame $width x $height is too small: tracking ±$MAX_SHIFT pixels needs at least $smallest in each direction"
         }
     }
 
@@ -287,6 +290,9 @@ class MotionTracker(private val width: Int, private val height: Int) {
 
         /** Largest movement, in frame pixels, that can be tracked per frame. */
         const val MAX_SHIFT = COARSE_SEARCH * 2 + FINE_SEARCH
+
+        /** Smallest useful patch, once the search margin is taken off each side. */
+        const val MIN_PATCH = 8
 
         /** Below this, the match is too ambiguous to move the pointer. */
         const val MIN_CONFIDENCE = 0.08f
