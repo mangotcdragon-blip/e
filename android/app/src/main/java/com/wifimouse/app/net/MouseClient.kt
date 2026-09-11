@@ -141,12 +141,7 @@ class MouseClient {
         }
 
         val live = try {
-            DatagramSocket().apply {
-                // Connecting pins the peer, which makes sends cheaper and lets
-                // the socket surface "nothing is listening" as an exception.
-                connect(InetSocketAddress(address, port))
-                soTimeout = RECEIVE_TIMEOUT_MS
-            }
+            openSocket(address, port)
         } catch (exc: Exception) {
             if (current(era)) {
                 publish(State.Failed("Cannot open socket: ${exc.message}"))
@@ -280,6 +275,34 @@ class MouseClient {
     }
 
     companion object {
+        /**
+         * Opens the socket and pins it to the server, which makes sends cheaper
+         * and lets the socket report "nothing is listening" as an exception.
+         *
+         * Takes the port as a parameter for a reason. This was originally
+         * written as `DatagramSocket().apply { connect(InetSocketAddress(address,
+         * port)) }`, where `port` quietly resolved to the receiver's own
+         * `DatagramSocket.getPort()` rather than the field of the same name —
+         * and that is -1 until the socket is connected, so every single
+         * connection failed with "port out of range: -1". Passing it in makes
+         * that shadowing impossible and lets the behaviour be tested.
+         */
+        fun openSocket(
+            address: InetAddress,
+            port: Int,
+            timeoutMillis: Int = RECEIVE_TIMEOUT_MS,
+        ): DatagramSocket {
+            val socket = DatagramSocket()
+            try {
+                socket.connect(InetSocketAddress(address, port))
+                socket.soTimeout = timeoutMillis
+            } catch (exc: Exception) {
+                socket.close()
+                throw exc
+            }
+            return socket
+        }
+
         private const val TAG = "MouseClient"
         private const val QUEUE_CAPACITY = 512
         private const val POLL_MS = 100L

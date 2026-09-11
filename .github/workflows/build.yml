@@ -3,6 +3,7 @@ name: build
 on:
   push:
     branches: ["**"]
+    tags: ["v*"]
   pull_request:
   workflow_dispatch:
 
@@ -10,6 +11,9 @@ jobs:
   android:
     name: Android app
     runs-on: ubuntu-latest
+    permissions:
+      # Needed only by the release step below, which runs on tags.
+      contents: write
     steps:
       - uses: actions/checkout@v4
 
@@ -40,6 +44,24 @@ jobs:
           name: wifimouse-debug-apk
           path: android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
+
+      - name: Publish the APK as a release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          cp android/app/build/outputs/apk/debug/app-debug.apk "wifimouse-${GITHUB_REF_NAME}.apk"
+          gh release create "$GITHUB_REF_NAME" "wifimouse-${GITHUB_REF_NAME}.apk" \
+            --title "WiFi Mouse $GITHUB_REF_NAME" \
+            --notes "Android app for using a phone as a mouse over Wi-Fi, in trackpad or camera mode.
+
+          Install the APK on the phone, then run the server on the PC:
+
+              git clone -b ${GITHUB_REF_NAME} https://github.com/${GITHUB_REPOSITORY}.git
+              cd e/server && py -3 wifimouse_server.py
+
+          The APK is debug-signed, so Android will ask you to allow installing from unknown sources. See the README for setup and gestures."
 
       - name: Upload lint report
         if: always()

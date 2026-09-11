@@ -32,6 +32,18 @@
         <item name="android:gravity">center_vertical</item>
     </style>
 
+    <!-- Keeps "Middle" on one line: the default button padding leaves too
+         little room for the word at a third of a narrow screen. -->
+    <style name="MouseRowButton" parent="Widget.Material3.Button.OutlinedButton">
+        <item name="android:paddingStart">2dp</item>
+        <item name="android:paddingEnd">2dp</item>
+        <item name="android:insetLeft">0dp</item>
+        <item name="android:insetRight">0dp</item>
+        <item name="android:maxLines">1</item>
+        <item name="android:minWidth">0dp</item>
+        <item name="android:textSize">14sp</item>
+    </style>
+
     <style name="MouseButton" parent="Widget.Material3.Button.OutlinedButton">
         <item name="android:textSize">17sp</item>
         <item name="android:insetTop">0dp</item>
