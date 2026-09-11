@@ -83,7 +83,7 @@ class TouchpadView @JvmOverloads constructor(
         SETTLE,
     }
 
-    private val handler = Handler(Looper.getMainLooper())
+    private val uiHandler = Handler(Looper.getMainLooper())
     private val density = resources.displayMetrics.density
     private val touchSlop = ViewConfiguration.get(context).scaledTouchSlop
     private val pxPerNotch = SCROLL_DP_PER_NOTCH * density
@@ -154,7 +154,7 @@ class TouchpadView @JvmOverloads constructor(
 
     private fun onFirstDown(event: MotionEvent) {
         parent?.requestDisallowInterceptTouchEvent(true)
-        cancelLongPress()
+        cancelPendingHold()
 
         activePointerId = event.getPointerId(0)
         lastX = event.x
@@ -175,13 +175,13 @@ class TouchpadView @JvmOverloads constructor(
             lastTapUpTime = 0L
             startHold(HapticFeedbackConstants.VIRTUAL_KEY)
         } else {
-            handler.postDelayed(longPressRunnable, LONG_PRESS_MS)
+            uiHandler.postDelayed(longPressRunnable, LONG_PRESS_MS)
         }
     }
 
     private fun onExtraDown(event: MotionEvent) {
         maxPointers = maxOf(maxPointers, event.pointerCount)
-        cancelLongPress()
+        cancelPendingHold()
         if (holdingLeftButton) return // stay in DRAG; extra fingers are ignored
 
         mode = Mode.SCROLL
@@ -221,7 +221,7 @@ class TouchpadView @JvmOverloads constructor(
             if (!movedBeyondSlop) {
                 if (hypot(x - downX, y - downY) <= touchSlop && !holdingLeftButton) continue
                 movedBeyondSlop = true
-                cancelLongPress()
+                cancelPendingHold()
             }
 
             if (dx == 0f && dy == 0f) continue
@@ -269,7 +269,7 @@ class TouchpadView @JvmOverloads constructor(
     }
 
     private fun onLastUp(event: MotionEvent) {
-        cancelLongPress()
+        cancelPendingHold()
         val duration = event.eventTime - downTime
 
         if (holdingLeftButton) {
@@ -294,7 +294,7 @@ class TouchpadView @JvmOverloads constructor(
     }
 
     private fun onCancel() {
-        cancelLongPress()
+        cancelPendingHold()
         if (holdingLeftButton) releaseHold()
         mode = Mode.IDLE
         activePointerId = MotionEvent.INVALID_POINTER_ID
@@ -318,13 +318,14 @@ class TouchpadView @JvmOverloads constructor(
         haptic(HapticFeedbackConstants.VIRTUAL_KEY)
     }
 
-    private fun cancelLongPress() {
-        handler.removeCallbacks(longPressRunnable)
+    /** Named so it cannot be mistaken for [View.cancelLongPress]. */
+    private fun cancelPendingHold() {
+        uiHandler.removeCallbacks(longPressRunnable)
     }
 
     override fun onDetachedFromWindow() {
         super.onDetachedFromWindow()
-        cancelLongPress()
+        cancelPendingHold()
         if (holdingLeftButton) releaseHold()
     }
 

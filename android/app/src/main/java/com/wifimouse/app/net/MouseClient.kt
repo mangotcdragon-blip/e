@@ -13,6 +13,7 @@ import java.net.PortUnreachableException
 import java.net.SocketTimeoutException
 import java.util.concurrent.ArrayBlockingQueue
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
 
 /**
@@ -43,6 +44,13 @@ class MouseClient {
     private val queue = ArrayBlockingQueue<Outgoing>(QUEUE_CAPACITY)
     private val seq = AtomicLong(1)
 
+    /**
+     * Bumped by every start and stop. A worker whose generation is no longer
+     * the current one exits quietly, so a reconnect can never end up with two
+     * sockets fighting over the same state.
+     */
+    private val generation = AtomicInteger(0)
+
     @Volatile private var socket: DatagramSocket? = null
     @Volatile private var running = false
     @Volatile private var sender: Thread? = null
@@ -62,6 +70,7 @@ class MouseClient {
 
     fun start(host: String, port: Int, token: String?) {
         stop()
+        val era = generation.incrementAndGet()
         this.host = host
         this.port = port
         this.token = token?.takeIf { it.isNotEmpty() }
@@ -70,7 +79,7 @@ class MouseClient {
         lastHelloAt = 0L
         running = true
         publish(State.Connecting(host))
-        sender = Thread({ sendLoop() }, "wifimouse-send").apply { isDaemon = true; start() }
+        sender = Thread({ sendLoop(era) }, "wifimouse-send").apply { isDaemon = true; start() }
     }
 
     /**
@@ -80,6 +89,7 @@ class MouseClient {
      */
     fun stop() {
         running = false
+        generation.incrementAndGet()
         val worker = sender
         sender = null
         receiver = null
@@ -116,12 +126,17 @@ class MouseClient {
 
     fun type(text: String, copies: Int) = send(Protocol.text(text), copies)
 
-    private fun sendLoop() {
+    /** True while this worker is still the connection the app wants. */
+    private fun current(era: Int) = running && generation.get() == era
+
+    private fun sendLoop(era: Int) {
         val address = try {
             InetAddress.getByName(host)
         } catch (exc: Exception) {
-            publish(State.Failed("Cannot find $host"))
-            running = false
+            if (current(era)) {
+                publish(State.Failed("Cannot find $host"))
+                running = false
+            }
             return
         }
 
@@ -133,16 +148,23 @@ class MouseClient {
                 soTimeout = RECEIVE_TIMEOUT_MS
             }
         } catch (exc: Exception) {
-            publish(State.Failed("Cannot open socket: ${exc.message}"))
-            running = false
+            if (current(era)) {
+                publish(State.Failed("Cannot open socket: ${exc.message}"))
+                running = false
+            }
+            return
+        }
+        if (!current(era)) {
+            live.close()
             return
         }
         socket = live
 
-        receiver = Thread({ receiveLoop(live) }, "wifimouse-recv").apply { isDaemon = true; start() }
+        receiver = Thread({ receiveLoop(live, era) }, "wifimouse-recv")
+            .apply { isDaemon = true; start() }
 
         try {
-            while (running) {
+            while (current(era)) {
                 val item = try {
                     queue.poll(POLL_MS, TimeUnit.MILLISECONDS)
                 } catch (_: InterruptedException) {
@@ -153,7 +175,7 @@ class MouseClient {
                 if (item != null) {
                     val payload = Protocol.packet(token, seq.getAndIncrement(), item.body)
                     var copies = item.copies.coerceIn(1, MAX_COPIES)
-                    while (copies-- > 0 && transmit(live, payload)) {
+                    while (copies-- > 0 && transmit(live, payload, era)) {
                         // Duplicates share a sequence number, so the server
                         // applies whichever arrives first and drops the rest.
                     }
@@ -161,7 +183,7 @@ class MouseClient {
 
                 if (now - lastHelloAt >= HELLO_INTERVAL_MS) {
                     lastHelloAt = now
-                    transmit(live, Protocol.packet(token, seq.getAndIncrement(), Protocol.HELLO))
+                    transmit(live, Protocol.packet(token, seq.getAndIncrement(), Protocol.HELLO), era)
                 }
 
                 // Heartbeats are answered; silence means the link is gone.
@@ -190,17 +212,17 @@ class MouseClient {
         }
     }
 
-    private fun transmit(live: DatagramSocket, payload: ByteArray): Boolean {
+    private fun transmit(live: DatagramSocket, payload: ByteArray, era: Int): Boolean {
         return try {
             live.send(DatagramPacket(payload, payload.size))
             true
         } catch (_: PortUnreachableException) {
             // The host is up but nothing is listening: keep trying so the app
             // recovers by itself once the server is started.
-            if (running) publish(State.Failed("No server on $host:$port"))
+            if (current(era)) publish(State.Failed("No server on $host:$port"))
             false
         } catch (exc: IOException) {
-            if (running) {
+            if (current(era)) {
                 Log.w(TAG, "send failed", exc)
                 publish(State.Failed(exc.message ?: "Network error"))
             }
@@ -210,9 +232,9 @@ class MouseClient {
 
     // -- receiving -------------------------------------------------------- #
 
-    private fun receiveLoop(live: DatagramSocket) {
+    private fun receiveLoop(live: DatagramSocket, era: Int) {
         val buffer = ByteArray(Protocol.MAX_PACKET)
-        while (running && !live.isClosed) {
+        while (current(era) && !live.isClosed) {
             val packet = DatagramPacket(buffer, buffer.size)
             try {
                 live.receive(packet)
@@ -221,13 +243,15 @@ class MouseClient {
             } catch (_: PortUnreachableException) {
                 continue
             } catch (exc: IOException) {
-                if (running) Log.d(TAG, "receive ended: ${exc.message}")
+                if (current(era)) Log.d(TAG, "receive ended: ${exc.message}")
                 return
             }
 
             val reply = String(packet.data, 0, packet.length, Charsets.UTF_8).trim()
             val now = SystemClock.uptimeMillis()
             when {
+                !current(era) -> return
+
                 reply.startsWith(Protocol.REPLY_OK) -> {
                     lastReplyAt = now
                     val name = reply.split(" ").getOrNull(2)?.let { Protocol.unquote(it) } ?: host
