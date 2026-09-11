@@ -135,6 +135,24 @@
 
             <TextView
                 style="@style/SectionHeading"
+                android:text="@string/settings_camera" />
+
+            <com.google.android.material.materialswitch.MaterialSwitch
+                android:id="@+id/cameraInvertSwitch"
+                style="@style/SettingSwitch"
+                android:text="@string/settings_camera_invert" />
+
+            <com.google.android.material.materialswitch.MaterialSwitch
+                android:id="@+id/cameraTorchSwitch"
+                style="@style/SettingSwitch"
+                android:text="@string/settings_camera_torch" />
+
+            <TextView
+                style="@style/SettingSummary"
+                android:text="@string/settings_camera_torch_summary" />
+
+            <TextView
+                style="@style/SectionHeading"
                 android:text="@string/settings_behaviour" />
 
             <com.google.android.material.materialswitch.MaterialSwitch

@@ -1,7 +1,6 @@
 package com.wifimouse.app
 
 import android.content.Intent
-import android.content.res.ColorStateList
 import android.os.Bundle
 import android.text.Editable
 import android.text.TextWatcher
@@ -9,34 +8,28 @@ import android.view.Menu
 import android.view.MenuItem
 import android.view.MotionEvent
 import android.view.View
-import android.view.WindowManager
 import android.view.inputmethod.InputMethodManager
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import com.google.android.material.button.MaterialButton
 import com.wifimouse.app.databinding.ActivityMainBinding
+import com.wifimouse.app.net.ConnectionController
 import com.wifimouse.app.net.Discovery
 import com.wifimouse.app.net.MouseClient
 import com.wifimouse.app.net.Protocol
 import com.wifimouse.app.ui.TouchpadView
 
+/** Trackpad mode: the phone lies flat and you use it like a laptop touchpad. */
 class MainActivity : AppCompatActivity(), TouchpadView.Listener {
 
     private lateinit var binding: ActivityMainBinding
     private lateinit var settings: Settings
-    private val client = MouseClient()
-
-    /** Buttons the user is physically holding, so nothing is left stuck down. */
-    private val heldButtons = mutableSetOf<Char>()
+    private lateinit var connection: ConnectionController
 
     /** Mirror of the text field, used to turn edits into keystrokes. */
     private var typedSoFar = ""
     private var suppressTextWatcher = false
-
-    private var connecting = false
-
-    private val copies: Int get() = if (settings.resendClicks) 2 else 1
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -45,13 +38,16 @@ class MainActivity : AppCompatActivity(), TouchpadView.Listener {
         setSupportActionBar(binding.toolbar)
 
         settings = Settings(this)
+        connection = ConnectionController(this, settings, binding.statusDot, binding.statusText)
+        connection.onState = ::renderExtras
+        renderExtras(MouseClient.State.Idle)
 
         binding.touchpad.listener = this
         binding.touchpad.hintColor = ContextCompat.getColor(this, R.color.touchpad_hint)
         binding.touchpad.touchColor = ContextCompat.getColor(this, R.color.touchpad_touch)
 
         binding.connectButton.setOnClickListener {
-            if (client.isConnected || connecting) disconnect() else connect()
+            if (connection.isLive) connection.disconnect() else if (!connection.connect()) discover()
         }
 
         bindMouseButton(binding.leftButton, 'l')
@@ -67,7 +63,7 @@ class MainActivity : AppCompatActivity(), TouchpadView.Listener {
         bindKey(binding.keyRight, "right")
         bindKey(binding.keyBackspace, "backspace")
         binding.keyEnter.setOnClickListener {
-            client.key("enter", copies)
+            connection.key("enter")
             resetTypedText()
         }
 
@@ -79,32 +75,26 @@ class MainActivity : AppCompatActivity(), TouchpadView.Listener {
             }
         })
         binding.keyInput.setOnEditorActionListener { _, _, _ ->
-            client.key("enter", copies)
+            connection.key("enter")
             resetTypedText()
             true
         }
-
-        client.onState = ::render
-        render(MouseClient.State.Idle)
     }
 
     override fun onResume() {
         super.onResume()
         applySettings()
-        if (settings.autoConnect && settings.isConfigured && !client.isConnected) connect()
+        connection.resume()
     }
 
     override fun onPause() {
         super.onPause()
-        // Leaving the app releases anything held, so the desktop never gets
-        // stuck mid-drag.
-        releaseEverything()
-        client.stop()
+        connection.pause()
     }
 
     override fun onDestroy() {
         super.onDestroy()
-        client.stop()
+        connection.destroy()
     }
 
     // -- menu -------------------------------------------------------------- #
@@ -115,6 +105,11 @@ class MainActivity : AppCompatActivity(), TouchpadView.Listener {
     }
 
     override fun onOptionsItemSelected(item: MenuItem): Boolean = when (item.itemId) {
+        R.id.action_camera_mouse -> {
+            startActivity(Intent(this, CameraMouseActivity::class.java))
+            true
+        }
+
         R.id.action_find -> {
             discover()
             true
@@ -139,20 +134,6 @@ class MainActivity : AppCompatActivity(), TouchpadView.Listener {
 
     // -- connection -------------------------------------------------------- #
 
-    private fun connect() {
-        if (!settings.isConfigured) {
-            discover()
-            return
-        }
-        applySettings()
-        client.start(settings.host, settings.port, settings.token)
-    }
-
-    private fun disconnect() {
-        releaseEverything()
-        client.stop()
-    }
-
     private fun applySettings() {
         with(binding.touchpad) {
             sensitivity = settings.sensitivity
@@ -162,6 +143,15 @@ class MainActivity : AppCompatActivity(), TouchpadView.Listener {
             tapToClick = settings.tapToClick
             hapticsEnabled = settings.haptics
         }
+    }
+
+    private fun renderExtras(state: MouseClient.State) {
+        val live = state is MouseClient.State.Connected || state is MouseClient.State.Connecting
+        binding.connectButton.setText(if (live) R.string.disconnect else R.string.connect)
+        binding.touchpad.hint = getString(
+            if (state is MouseClient.State.Connected) R.string.touchpad_hint
+            else R.string.touchpad_hint_offline
+        )
     }
 
     private fun discover() {
@@ -212,64 +202,20 @@ class MainActivity : AppCompatActivity(), TouchpadView.Listener {
                 .show()
             return
         }
-        connect()
-    }
-
-    // -- rendering --------------------------------------------------------- #
-
-    private fun render(state: MouseClient.State) {
-        connecting = state is MouseClient.State.Connecting
-
-        val (text, colorRes) = when (state) {
-            is MouseClient.State.Idle ->
-                (if (settings.isConfigured) getString(R.string.status_offline)
-                else getString(R.string.status_no_host)) to R.color.status_offline
-
-            is MouseClient.State.Connecting ->
-                getString(R.string.status_connecting, state.host) to R.color.status_pending
-
-            is MouseClient.State.Connected ->
-                getString(R.string.status_connected, state.serverName, state.rttMs) to
-                    R.color.status_connected
-
-            is MouseClient.State.Failed -> state.reason to R.color.status_error
-        }
-
-        binding.statusText.text = text
-        binding.statusDot.backgroundTintList =
-            ColorStateList.valueOf(ContextCompat.getColor(this, colorRes))
-
-        val live = state is MouseClient.State.Connected || state is MouseClient.State.Connecting
-        binding.connectButton.setText(if (live) R.string.disconnect else R.string.connect)
-        binding.touchpad.hint = getString(
-            if (state is MouseClient.State.Connected) R.string.touchpad_hint
-            else R.string.touchpad_hint_offline
-        )
-
-        if (settings.keepScreenOn && state is MouseClient.State.Connected) {
-            window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        } else {
-            window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        }
+        connection.connect()
     }
 
     // -- touchpad callbacks ------------------------------------------------ #
 
-    override fun onMove(dx: Float, dy: Float) = client.move(dx, dy)
+    override fun onMove(dx: Float, dy: Float) = connection.move(dx, dy)
 
-    override fun onScroll(dx: Float, dy: Float) = client.scroll(dx, dy)
+    override fun onScroll(dx: Float, dy: Float) = connection.scroll(dx, dy)
 
-    override fun onClick(button: Char) = client.click(button, copies)
+    override fun onClick(button: Char) = connection.click(button)
 
-    override fun onPress(button: Char) {
-        heldButtons.add(button)
-        client.buttonDown(button, copies)
-    }
+    override fun onPress(button: Char) = connection.press(button)
 
-    override fun onRelease(button: Char) {
-        heldButtons.remove(button)
-        client.buttonUp(button, copies)
-    }
+    override fun onRelease(button: Char) = connection.release(button)
 
     // -- buttons and keys -------------------------------------------------- #
 
@@ -282,26 +228,22 @@ class MainActivity : AppCompatActivity(), TouchpadView.Listener {
             when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
                     target.isPressed = true
-                    onPress(button)
+                    connection.press(button)
                 }
 
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                     target.isPressed = false
-                    if (button in heldButtons) onRelease(button)
+                    connection.release(button)
                 }
             }
             true
         }
         // Reached by TalkBack and keyboard activation, which never send touches.
-        view.setOnClickListener { client.click(button, copies) }
+        view.setOnClickListener { connection.click(button) }
     }
 
     private fun bindKey(view: MaterialButton, name: String) {
-        view.setOnClickListener { client.key(name, copies) }
-    }
-
-    private fun releaseEverything() {
-        for (button in heldButtons.toList()) onRelease(button)
+        view.setOnClickListener { connection.key(name) }
     }
 
     // -- keyboard ---------------------------------------------------------- #
@@ -332,9 +274,9 @@ class MainActivity : AppCompatActivity(), TouchpadView.Listener {
         while (shared < next.length && shared < typedSoFar.length && next[shared] == typedSoFar[shared]) {
             shared++
         }
-        repeat(typedSoFar.length - shared) { client.key("backspace", copies) }
+        repeat(typedSoFar.length - shared) { connection.key("backspace") }
         val added = next.substring(shared)
-        if (added.isNotEmpty()) client.type(added, copies)
+        if (added.isNotEmpty()) connection.type(added)
         typedSoFar = next
 
         if (next.length > TYPED_BUFFER_LIMIT) resetTypedText()

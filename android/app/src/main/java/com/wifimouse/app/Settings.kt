@@ -62,6 +62,23 @@ class Settings(context: Context) {
         get() = prefs.getBoolean(KEY_RESEND, true)
         set(value) = prefs.edit().putBoolean(KEY_RESEND, value).apply()
 
+    /** Pointer speed for camera mode; the trackpad has its own. */
+    var cameraSensitivity: Float
+        get() = prefs.getFloat(KEY_CAMERA_SENSITIVITY, 1.0f)
+        set(value) = prefs.edit()
+            .putFloat(KEY_CAMERA_SENSITIVITY, value.coerceIn(MIN_CAMERA_SENSITIVITY, MAX_CAMERA_SENSITIVITY))
+            .apply()
+
+    /** For holding the phone the other way up, or aiming the camera forwards. */
+    var cameraInvertY: Boolean
+        get() = prefs.getBoolean(KEY_CAMERA_INVERT_Y, false)
+        set(value) = prefs.edit().putBoolean(KEY_CAMERA_INVERT_Y, value).apply()
+
+    /** Light the surface under the phone as soon as camera mode opens. */
+    var cameraTorch: Boolean
+        get() = prefs.getBoolean(KEY_CAMERA_TORCH, false)
+        set(value) = prefs.edit().putBoolean(KEY_CAMERA_TORCH, value).apply()
+
     var autoConnect: Boolean
         get() = prefs.getBoolean(KEY_AUTO_CONNECT, true)
         set(value) = prefs.edit().putBoolean(KEY_AUTO_CONNECT, value).apply()
@@ -73,6 +90,8 @@ class Settings(context: Context) {
         const val MAX_SENSITIVITY = 4.0f
         const val MIN_SCROLL = 0.2f
         const val MAX_SCROLL = 4.0f
+        const val MIN_CAMERA_SENSITIVITY = 0.2f
+        const val MAX_CAMERA_SENSITIVITY = 4.0f
 
         private const val KEY_HOST = "host"
         private const val KEY_PORT = "port"
@@ -86,5 +105,8 @@ class Settings(context: Context) {
         private const val KEY_KEEP_SCREEN_ON = "keep_screen_on"
         private const val KEY_RESEND = "resend_clicks"
         private const val KEY_AUTO_CONNECT = "auto_connect"
+        private const val KEY_CAMERA_SENSITIVITY = "camera_sensitivity"
+        private const val KEY_CAMERA_INVERT_Y = "camera_invert_y"
+        private const val KEY_CAMERA_TORCH = "camera_torch"
     }
 }

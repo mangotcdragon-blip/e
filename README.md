@@ -1,8 +1,17 @@
 # WiFi Mouse
 
-Turn an Android phone into a trackpad for your PC over Wi-Fi. The phone sends
+Turn an Android phone into a mouse for your PC over Wi-Fi. The phone sends
 pointer, scroll, click and keystroke events to a small server on the computer;
 the server replays them as real input.
+
+Two ways to drive it:
+
+- **Trackpad mode** — the phone lies flat and you use it like a laptop
+  touchpad. Precise, and the lowest latency.
+- **Camera mouse mode** — hold the phone like a mouse and slide it around. The
+  rear camera watches the surface go past, the way the sensor in an optical
+  mouse does, with left and right buttons under your fingers and a scroll wheel
+  between them.
 
 ```
   Android app  ── UDP, port 7654 ──▶  wifimouse server  ──▶  SendInput / Quartz / XTEST
@@ -81,6 +90,32 @@ PC**. It fills in the address itself. If discovery is blocked on your network
 (common on guest Wi-Fi and some mesh routers), type the address from the server
 banner into **Settings → PC address**.
 
+## Camera mouse mode
+
+Open it from **⋮ → Camera mouse**. Hold the phone screen-up like a mouse and
+slide it over a surface with some visible pattern — wood grain, fabric, printed
+paper. The buttons sit at the top of the screen where your index and middle
+fingers land, with a notched scroll wheel between them; pressing the wheel is a
+middle click, and a flick sends it spinning.
+
+The **Tracking** bar shows how well the camera can see. When it stays low:
+
+- Turn the **light** on for a dim surface.
+- Tilt the phone so the camera sits slightly above the surface. Phone cameras
+  cannot focus on something pressed right against the lens, which is the main
+  thing separating this from a real mouse — a mouse has a lens designed for
+  exactly that distance.
+- Tap **Refocus**.
+- Move to a surface with more pattern. A bare white desk or glass has nothing
+  to track, and the app will hold the pointer still rather than let it drift.
+
+It also works held in the air, pointed at the room, like a laser pointer.
+
+**What to expect.** A phone camera delivers about 30 readings a second; the
+sensor in a real mouse manages thousands. Camera mode feels heavier than the
+trackpad and always will. It is genuinely useful for a lean-back machine across
+the room, and good fun, but trackpad mode is the one to use for real work.
+
 ## Gestures
 
 | Gesture | Action |
@@ -135,6 +170,19 @@ stall to add lag. The parts that *do* need reliability are handled explicitly:
 - **Sub-pixel movement accumulates** instead of being rounded away, so slow
   precise dragging works.
 
+Camera mode rides on the same `m` packets: the tracker measures how far the
+picture moved between two frames, and the phone moved the opposite way.
+
+**How the tracking works.** Each frame's luma plane is averaged down to 80x60,
+and consecutive frames go through block matching — a patch from the middle of
+the new frame is slid over the old one until it lines up. A coarse pass on a
+half-size copy finds the rough offset, a fine pass refines it, and a parabola
+fitted through the neighbouring scores gives sub-pixel precision. That is about
+110k byte comparisons per frame, and it tracks movement up to 16 pixels per
+frame. Every reading carries a confidence and a texture score; when either is
+too low — a blank desk, a defocused blur, a jump too big to match — the frame
+is dropped rather than allowed to fling the pointer somewhere random.
+
 Full protocol reference: [`server/wifimouse/protocol.py`](server/wifimouse/protocol.py).
 
 ## Security
@@ -156,8 +204,9 @@ is not running.
 ```
 android/    the Android app (Kotlin, minSdk 24)
   app/src/main/java/com/wifimouse/app/
-    net/          protocol, UDP client, LAN discovery
-    ui/           trackpad view and pointer maths
+    net/          protocol, UDP client, LAN discovery, connection controller
+    ui/           trackpad view, scroll wheel, pointer maths
+    vision/       camera frame handling and the motion tracker
 server/     the desktop server (Python, stdlib-only on Windows)
   wifimouse/    protocol, input backends, UDP server, CLI
   tests/        protocol and end-to-end socket tests
@@ -186,4 +235,6 @@ printf 'WM1 - 1 m 40 0' | nc -u -w1 127.0.0.1 7654  # terminal 2
 | Connects, but nothing moves | On macOS grant Accessibility permission; on Linux check you are on X11, not Wayland. |
 | "Pairing code rejected" | The app's code must match the server's `--token` exactly. |
 | Pointer drifts or feels heavy | Adjust pointer speed in Settings; turn acceleration off for a strictly 1:1 feel. |
+| Camera mode tracks nothing | Check the Tracking bar. Needs a patterned, lit surface and a camera that can focus on it — see Camera mouse mode above. |
+| Camera mode moves the wrong way vertically | Settings → Camera mouse → Invert vertical movement. |
 | Scrolling goes the wrong way | Toggle natural scrolling in Settings. |

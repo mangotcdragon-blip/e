@@ -64,4 +64,25 @@
 
     <string name="gesture_guide">• Drag with one finger — move the pointer\n• Tap — left click\n• Two-finger tap — right click\n• Three-finger tap — middle click\n• Drag with two fingers — scroll\n• Tap, then press and drag — drag and drop\n• Press and hold, then drag — drag and drop\n\nThe Left, Middle and Right buttons stay held while you touch them, so you can hold one and drag on the pad at the same time.</string>
     <string name="close">Close</string>
+
+    <!-- Camera mouse -->
+    <string name="camera_mouse">Camera mouse</string>
+    <string name="trackpad_mode">Trackpad</string>
+    <string name="tracking">Tracking</string>
+    <string name="torch_on">Light on</string>
+    <string name="torch_off">Light off</string>
+    <string name="refocus">Refocus</string>
+    <string name="wheel_description">Scroll wheel</string>
+    <string name="camera_permission_needed">Camera mouse needs the camera.\n\nThe rear camera watches the surface under the phone and turns what it sees into pointer movement, the same way the sensor in an optical mouse does.</string>
+    <string name="camera_permission_denied">Camera access was refused. Grant it in Android Settings → Apps → WiFi Mouse → Permissions, or use trackpad mode instead.</string>
+    <string name="grant_camera">Allow camera</string>
+    <string name="camera_failed">Camera could not start: %1$s</string>
+    <string name="camera_speed">Pointer speed: %1$.1f×</string>
+    <string name="camera_help_title">Using the camera mouse</string>
+    <string name="camera_help">Hold the phone like a mouse, screen up, and slide it over a surface with some visible pattern: wood grain, fabric, paper with writing on it. Bare white desks and glass have nothing to track.\n\nThe tracking bar shows how well it can see. If it stays low:\n\n• Turn the light on, for a dim surface\n• Tilt the phone so the camera sits a little above the surface — phone cameras cannot focus on something pressed right against them\n• Tap Refocus\n• Try a surface with more pattern\n\nIt also works pointed at the room, held in the air like a laser pointer.\n\nA phone camera manages about 30 readings a second where a real mouse manages thousands, so this always feels heavier than the trackpad. Use trackpad mode for precise work.</string>
+    <string name="settings_camera">Camera mouse</string>
+    <string name="settings_camera_sensitivity">Camera pointer speed: %1$.1f×</string>
+    <string name="settings_camera_invert">Invert vertical movement</string>
+    <string name="settings_camera_torch">Turn the light on automatically</string>
+    <string name="settings_camera_torch_summary">Lights the surface under the phone; costs battery</string>
 </resources>

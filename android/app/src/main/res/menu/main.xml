@@ -2,6 +2,10 @@
 <menu xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto">
     <item
+        android:id="@+id/action_camera_mouse"
+        android:title="@string/camera_mouse"
+        app:showAsAction="never" />
+    <item
         android:id="@+id/action_find"
         android:title="@string/find_pc"
         app:showAsAction="never" />

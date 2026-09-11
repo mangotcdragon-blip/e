@@ -32,6 +32,14 @@
         <item name="android:gravity">center_vertical</item>
     </style>
 
+    <style name="MouseButton" parent="Widget.Material3.Button.OutlinedButton">
+        <item name="android:textSize">17sp</item>
+        <item name="android:insetTop">0dp</item>
+        <item name="android:insetBottom">0dp</item>
+        <item name="cornerRadius">18dp</item>
+        <item name="strokeWidth">2dp</item>
+    </style>
+
     <style name="SettingSummary" parent="">
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">wrap_content</item>

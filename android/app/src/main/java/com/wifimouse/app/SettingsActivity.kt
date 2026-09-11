@@ -40,6 +40,8 @@ class SettingsActivity : AppCompatActivity() {
 
         bindSwitch(binding.accelerationSwitch, settings.acceleration) { settings.acceleration = it }
         bindSwitch(binding.naturalScrollSwitch, settings.naturalScroll) { settings.naturalScroll = it }
+        bindSwitch(binding.cameraInvertSwitch, settings.cameraInvertY) { settings.cameraInvertY = it }
+        bindSwitch(binding.cameraTorchSwitch, settings.cameraTorch) { settings.cameraTorch = it }
         bindSwitch(binding.tapToClickSwitch, settings.tapToClick) { settings.tapToClick = it }
         bindSwitch(binding.hapticsSwitch, settings.haptics) { settings.haptics = it }
         bindSwitch(binding.keepAwakeSwitch, settings.keepScreenOn) { settings.keepScreenOn = it }
