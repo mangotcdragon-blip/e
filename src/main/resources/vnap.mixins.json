@@ -9,7 +9,8 @@
     "SheepSoundMixin",
     "VillagerDataMixin",
     "VillagerSleepMixin",
-    "VillagerSoundMixin"
+    "VillagerSoundMixin",
+    "WanderingTraderSoundMixin"
   ],
   "injectors": {
     "defaultRequire": 1

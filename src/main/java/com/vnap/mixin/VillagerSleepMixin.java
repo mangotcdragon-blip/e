@@ -15,4 +15,13 @@ public abstract class VillagerSleepMixin {
 	private void vnap$delaySleepUntilBedtimeLineFinishes(BlockPos bedPos, CallbackInfo ci) {
 		if ((Object) this instanceof Villager villager && ContextualDialogueController.delayVillagerSleep(villager, bedPos)) ci.cancel();
 	}
+
+	/**
+	 * Fabric's {@code EntitySleepEvents.STOP_SLEEPING} covers any entity; Forge only
+	 * has {@code PlayerWakeUpEvent}, so villagers are picked up here instead.
+	 */
+	@Inject(method = "stopSleeping", at = @At("TAIL"))
+	private void vnap$onStopSleeping(CallbackInfo ci) {
+		if ((Object) this instanceof Villager villager) ContextualDialogueController.onVillagerStopSleeping(villager);
+	}
 }

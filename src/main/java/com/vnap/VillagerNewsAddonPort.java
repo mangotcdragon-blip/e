@@ -5,6 +5,7 @@ import com.vnap.dialogue.ContextualDialogueController;
 import com.vnap.dialogue.DialogueCatalog;
 import com.vnap.item.VillagerNewsItems;
 import com.vnap.network.ModNetwork;
+import com.vnap.network.VillagerNewsSettingsNetwork;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.eventbus.api.IEventBus;
@@ -20,8 +21,8 @@ import org.slf4j.LoggerFactory;
  * <p>The Forge mod id and the resource namespace deliberately differ. Forge
  * validates mod ids against {@code ^[a-z][a-z0-9_]{1,63}$}, which the upstream
  * Fabric id {@code villager-news-addon-port} fails on account of its hyphens.
- * {@link net.minecraft.resources.ResourceLocation} namespaces do allow hyphens,
- * so the assets keep their original paths and only the loader-facing id changes.
+ * {@link ResourceLocation} namespaces do allow hyphens, so the assets keep their
+ * original paths and only the loader-facing id changes.
  */
 @Mod(VillagerNewsAddonPort.MOD_ID)
 public class VillagerNewsAddonPort {
@@ -37,15 +38,19 @@ public class VillagerNewsAddonPort {
 		IEventBus modBus = FMLJavaModLoadingContext.get().getModEventBus();
 
 		VillagerNewsItems.register(modBus);
+		ModSounds.register(modBus);
+		// Parses the catalog and queues one SoundEvent per voice line. This has to
+		// happen now: Forge fires its registry events straight after construction.
+		DialogueCatalog.register(modBus);
 		modBus.addListener(this::commonSetup);
 
 		VillagerNewsSettings.load();
+		MinecraftForge.EVENT_BUS.register(VillagerNewsSettingsNetwork.class);
 		ContextualDialogueController.register(MinecraftForge.EVENT_BUS);
 	}
 
 	private void commonSetup(FMLCommonSetupEvent event) {
-		ModNetwork.register();
-		event.enqueueWork(DialogueCatalog::register);
+		event.enqueueWork(ModNetwork::register);
 		LOGGER.info("Villager News models, textures, and contextual dialogue are ready.");
 	}
 

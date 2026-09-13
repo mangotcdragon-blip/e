@@ -52,27 +52,16 @@ mixin {
 
 repositories {
     mavenCentral()
-    exclusiveContent {
-        forRepository {
-            maven {
-                name = 'Modrinth'
-                url = 'https://api.modrinth.com/maven'
-            }
-        }
-        filter {
-            includeGroup 'maven.modrinth'
-        }
-    }
 }
 
 dependencies {
     minecraft "net.minecraftforge:forge:${minecraft_version}-${forge_version}"
 
-    // Entity Model Features / Entity Texture Features supply the OptiFine-format
-    // .jem models and .properties texture rules this mod ships. Compile-only:
-    // the mod degrades gracefully when they are absent (see EmfBridge).
-    compileOnly "maven.modrinth:4I1XuqiY:${emf_version}"
-    compileOnly "maven.modrinth:BVzZfTc1:${etf_version}"
+    // Entity Model Features and Entity Texture Features are NOT compiled against.
+    // Their 1.20.1 API differs from the 3.x/7.x Fabric builds this port came from,
+    // so every EMF call goes through com.vnap.client.EmfBridge by reflection and
+    // the mod degrades to vanilla models when they are absent. Install them at
+    // runtime (client side) to get the Villager News models and textures.
 
     annotationProcessor 'org.spongepowered:mixin:0.8.5:processor'
 }

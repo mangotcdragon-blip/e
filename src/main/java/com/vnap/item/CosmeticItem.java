@@ -10,6 +10,9 @@ import net.minecraft.world.item.Equipable;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
+import net.minecraftforge.client.extensions.common.IClientItemExtensions;
+
+import java.util.function.Consumer;
 
 /**
  * A head-slot cosmetic.
@@ -36,5 +39,21 @@ public class CosmeticItem extends Item implements Equipable {
 	@Override
 	public InteractionResultHolder<ItemStack> use(Level level, Player player, InteractionHand hand) {
 		return swapWithEquipmentSlot(this, level, player, hand);
+	}
+
+	/**
+	 * Routes drawing through {@code CosmeticItemRenderer} so the worn model can be
+	 * substituted in the head slot, which 1.20.1 item JSON cannot express.
+	 * Forge only calls this on a physical client, so the client-only classes the
+	 * returned extension touches are never loaded on a server.
+	 */
+	@Override
+	public void initializeClient(Consumer<IClientItemExtensions> consumer) {
+		consumer.accept(new IClientItemExtensions() {
+			@Override
+			public net.minecraft.client.renderer.blockentity.BlockEntityWithoutLevelRenderer getCustomRenderer() {
+				return com.vnap.client.CosmeticItemRenderer.get();
+			}
+		});
 	}
 }
