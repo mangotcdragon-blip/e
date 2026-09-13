@@ -1,6 +1,7 @@
 modLoader="javafml"
 loaderVersion="${loader_version_range}"
 license="${mod_license}"
+issueTrackerURL="https://github.com/MarcYohannTheScripter/villager-news-addon-port/issues"
 
 [[mods]]
 modId="${mod_id}"
@@ -24,3 +25,20 @@ ${mod_description}
     versionRange="${minecraft_version_range}"
     ordering="NONE"
     side="BOTH"
+
+# EMF/ETF are client-side renderers for the OptiFine-format models and textures
+# this mod ships. They are optional so a dedicated server can load the mod, and
+# so the client still starts (with vanilla villager models) when they are absent.
+[[dependencies.${mod_id}]]
+    modId="entity_model_features"
+    type="optional"
+    versionRange="[2.0,)"
+    ordering="AFTER"
+    side="CLIENT"
+
+[[dependencies.${mod_id}]]
+    modId="entity_texture_features"
+    type="optional"
+    versionRange="[6.0,)"
+    ordering="AFTER"
+    side="CLIENT"
