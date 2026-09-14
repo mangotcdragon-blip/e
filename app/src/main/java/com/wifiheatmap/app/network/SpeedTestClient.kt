@@ -9,19 +9,33 @@ import java.util.concurrent.TimeUnit
 import kotlin.math.max
 
 /**
- * Measures real download throughput against Cloudflare's public speed-test
- * backend (the same endpoint speed.cloudflare.com itself uses). It requires
- * no API key and, unlike most speed-test sites, allows direct requests from
- * plain HTTP clients (the site's own CORS restriction only matters to
- * browsers, not to a native app), so we can stream real bytes and time them.
+ * Measures real download throughput by streaming from a public speed-test
+ * file host and timing the transfer. No API key is required, and unlike most
+ * speed-test sites their CORS restriction only matters to browsers, not to a
+ * native app, so a plain HTTP client can pull real bytes and time them.
+ *
+ * Two independent hosts are tried in order: some edge networks put bot
+ * protection in front of endpoints that serve unlimited free bandwidth (seen
+ * in practice as an HTTP 403 from Cloudflare's speed-test backend on some
+ * connections even with a browser-like request), so a plain static file from
+ * a second, unrelated host is used as a fallback rather than letting one
+ * provider's block take out the whole feature.
  */
 object SpeedTestClient {
 
-    private const val DOWNLOAD_URL = "https://speed.cloudflare.com/__down?bytes=100000000"
+    private data class Endpoint(val url: String, val label: String)
+
+    private val ENDPOINTS = listOf(
+        Endpoint("https://speed.cloudflare.com/__down?bytes=100000000", "Cloudflare"),
+        Endpoint("https://speed.hetzner.de/100MB.bin", "Hetzner")
+    )
+
     private const val MAX_TEST_DURATION_MS = 12_000L
     private const val MIN_TEST_DURATION_MS = 2_000L
     private const val MIN_BYTES_FOR_SHORT_TEST = 500_000L
     private const val READ_BUFFER_SIZE = 64 * 1024
+    private const val BROWSER_USER_AGENT =
+        "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36"
 
     private val client = OkHttpClient.Builder()
         .connectTimeout(10, TimeUnit.SECONDS)
@@ -36,19 +50,38 @@ object SpeedTestClient {
     /**
      * Streams the download in [READ_BUFFER_SIZE] chunks, reporting progress via
      * [onProgress], and stops once [MAX_TEST_DURATION_MS] has elapsed so the
-     * test finishes quickly even on very fast connections (the payload is
+     * test finishes quickly even on very fast connections (each payload is
      * larger than any realistic home connection can finish in that window).
+     * Tries each endpoint in [ENDPOINTS] in turn, returning the first success.
      */
     suspend fun measureDownloadSpeed(
         onProgress: (bytesSoFar: Long, elapsedMs: Long) -> Unit = { _, _ -> }
     ): SpeedTestResult = withContext(Dispatchers.IO) {
-        val request = Request.Builder().url(DOWNLOAD_URL).build()
-        try {
+        var lastFailure: SpeedTestResult.Failure? = null
+        for (endpoint in ENDPOINTS) {
+            when (val result = attempt(endpoint, onProgress)) {
+                is SpeedTestResult.Success -> return@withContext result
+                is SpeedTestResult.Failure -> lastFailure = result
+            }
+        }
+        lastFailure ?: SpeedTestResult.Failure("No speed test servers available")
+    }
+
+    private fun attempt(
+        endpoint: Endpoint,
+        onProgress: (bytesSoFar: Long, elapsedMs: Long) -> Unit
+    ): SpeedTestResult {
+        val request = Request.Builder()
+            .url(endpoint.url)
+            .header("User-Agent", BROWSER_USER_AGENT)
+            .header("Accept", "*/*")
+            .build()
+        return try {
             client.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) {
-                    return@withContext SpeedTestResult.Failure("Server returned HTTP ${response.code}")
+                    return failure(endpoint, "Server returned HTTP ${response.code}")
                 }
-                val body = response.body ?: return@withContext SpeedTestResult.Failure("Empty response body")
+                val body = response.body ?: return failure(endpoint, "Empty response body")
                 val source = body.source()
                 val buffer = ByteArray(READ_BUFFER_SIZE)
                 var totalBytes = 0L
@@ -65,14 +98,17 @@ object SpeedTestClient {
 
                 val elapsedMs = max(1L, (System.nanoTime() - startTime) / 1_000_000)
                 if (elapsedMs < MIN_TEST_DURATION_MS && totalBytes < MIN_BYTES_FOR_SHORT_TEST) {
-                    return@withContext SpeedTestResult.Failure("Not enough data transferred to measure speed")
+                    return failure(endpoint, "Not enough data transferred to measure speed")
                 }
                 val seconds = elapsedMs / 1000.0
                 val mbps = (totalBytes * 8) / seconds / 1_000_000.0
                 SpeedTestResult.Success(mbps, totalBytes, elapsedMs)
             }
         } catch (e: IOException) {
-            SpeedTestResult.Failure(e.message ?: "Network error")
+            failure(endpoint, e.message ?: "Network error")
         }
     }
+
+    private fun failure(endpoint: Endpoint, message: String) =
+        SpeedTestResult.Failure("${endpoint.label}: $message")
 }

@@ -13,13 +13,18 @@ An Android app for mapping WiFi download speed across your house.
 ## How the speed test works
 
 The app performs a real download speed test — it isn't simulated. It streams
-data from [speed.cloudflare.com](https://speed.cloudflare.com)'s public
-speed-test backend (the same endpoint that site's own browser page uses) and
-measures actual throughput: bytes received over elapsed time, in Mbps. No API
-key is required. A native app can call this endpoint directly (the CORS
-restriction that blocks a plain webpage from doing the same doesn't apply to
-native HTTP clients), so results reflect your device's real connection at
-wherever you're standing.
+data from a public speed-test file host and measures actual throughput: bytes
+received over elapsed time, in Mbps. No API key is required. A native app can
+call these endpoints directly (the CORS restriction that blocks a plain
+webpage from doing the same doesn't apply to native HTTP clients), so results
+reflect your device's real connection at wherever you're standing.
+
+It tries [speed.cloudflare.com](https://speed.cloudflare.com)'s public
+speed-test backend first, and falls back to a plain static file on
+speed.hetzner.de if that doesn't succeed — some networks put bot protection
+in front of Cloudflare's endpoint that can 403 even a browser-like request,
+so a second, unrelated host keeps the feature working rather than depending
+on one provider.
 
 Each test streams for up to ~12 seconds (or until ~100 MB has been
 transferred, whichever comes first) and requires normal internet access —
