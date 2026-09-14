@@ -55,6 +55,8 @@
 
     <string name="close">Close</string>
     <string name="help">Help</string>
+    <string name="diagnostics">texture %1$.1f (needs %2$.1f) · match %3$.2f · move %4$.2f, %5$.2f · sent %6$d</string>
+    <string name="surface_too_plain">Camera cannot see enough detail here — try a patterned surface, the light, or Refocus</string>
     <string name="controls_hint">Double-tap anywhere below the buttons for controls</string>
     <string name="palm_guard_description">Palm rest — touches here are ignored</string>
 

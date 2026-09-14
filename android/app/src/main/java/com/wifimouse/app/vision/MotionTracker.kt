@@ -35,10 +35,17 @@ class MotionTracker(private val width: Int, private val height: Int) {
         val usable: Boolean
             get() = confidence >= MotionTracker.MIN_CONFIDENCE && texture >= MotionTracker.MIN_TEXTURE
 
-        /** 0..1, for the on-screen tracking-quality meter. */
+        /**
+         * 0..1 for the on-screen meter, and zero whenever the reading is not
+         * being used.
+         *
+         * This deliberately does not fade towards the threshold. An earlier
+         * version scaled with texture, so the meter could sit at 98% while
+         * every frame was in fact being discarded — which is worse than no
+         * meter at all, because it says the pointer should be moving.
+         */
         val quality: Float
-            get() = (confidence / MotionTracker.MIN_CONFIDENCE * 0.5f)
-                .coerceAtMost(1f) * (texture / MotionTracker.MIN_TEXTURE).coerceAtMost(1f)
+            get() = if (!usable) 0f else (confidence / GOOD_CONFIDENCE).coerceIn(0f, 1f)
 
         companion object {
             val NONE = Result(0f, 0f, 0f, 0f)
@@ -101,10 +108,7 @@ class MotionTracker(private val width: Int, private val height: Int) {
 
         for (oy in -COARSE_SEARCH..COARSE_SEARCH) {
             for (ox in -COARSE_SEARCH..COARSE_SEARCH) {
-                val score = sad(
-                    previousHalf, currentHalf, halfWidth,
-                    x0, y0, x1, y1, ox, oy, step = 1, ceiling = best,
-                )
+                val score = sad(previousHalf, currentHalf, halfWidth, x0, y0, x1, y1, ox, oy)
                 if (score < best) {
                     best = score
                     bestX = ox
@@ -136,7 +140,7 @@ class MotionTracker(private val width: Int, private val height: Int) {
             val oy = guessY + row - FINE_SEARCH
             for (col in 0 until FINE_WINDOW) {
                 val ox = guessX + col - FINE_SEARCH
-                val score = sad(previous, current, width, x0, y0, x1, y1, ox, oy, step = 1)
+                val score = sad(previous, current, width, x0, y0, x1, y1, ox, oy)
                 fineScores[row * FINE_WINDOW + col] = score
                 total += score
                 if (score < best) {
@@ -194,8 +198,9 @@ class MotionTracker(private val width: Int, private val height: Int) {
      * Sum of absolute differences between the patch of [current] and the same
      * patch of [previous] shifted by ([offsetX], [offsetY]).
      *
-     * Bails out once the running total passes [ceiling], since a candidate that
-     * is already worse than the best cannot win.
+     * Every candidate is scored in full. An early bail-out used to compare a
+     * partial average against the best complete one, which can throw away the
+     * true match when its first rows happen to score badly.
      */
     private fun sad(
         previous: ByteArray,
@@ -207,8 +212,6 @@ class MotionTracker(private val width: Int, private val height: Int) {
         y1: Int,
         offsetX: Int,
         offsetY: Int,
-        step: Int,
-        ceiling: Float = Float.MAX_VALUE,
     ): Float {
         var total = 0
         var samples = 0
@@ -222,10 +225,9 @@ class MotionTracker(private val width: Int, private val height: Int) {
                 val b = previous[previousRow + x - offsetX].toInt() and 0xFF
                 total += abs(a - b)
                 samples++
-                x += step
+                x++
             }
-            if (samples > 0 && total.toFloat() / samples > ceiling) return Float.MAX_VALUE
-            y += step
+            y++
         }
         return if (samples == 0) Float.MAX_VALUE else total.toFloat() / samples
     }
@@ -299,5 +301,8 @@ class MotionTracker(private val width: Int, private val height: Int) {
 
         /** Below this, the camera is looking at something too plain to track. */
         const val MIN_TEXTURE = 4.0f
+
+        /** Confidence at which the meter is considered full. */
+        const val GOOD_CONFIDENCE = 0.35f
     }
 }

@@ -29,6 +29,7 @@ import com.wifimouse.app.net.Discovery
 import com.wifimouse.app.net.MouseClient
 import com.wifimouse.app.net.Protocol
 import com.wifimouse.app.vision.CameraMouse
+import com.wifimouse.app.vision.MotionTracker
 import kotlin.math.hypot
 import kotlin.math.roundToInt
 
@@ -389,28 +390,47 @@ class CameraMouseActivity : AppCompatActivity() {
 
     /**
      * Called on the camera's analysis thread. Sending is safe from here — the
-     * client queue is thread-safe — but the meter has to go to the main thread,
-     * and only occasionally, since this runs 30 times a second.
+     * client queue is thread-safe — but the readout has to go to the main
+     * thread, and only occasionally, since this runs 30 times a second.
      */
-    private fun onCameraMotion(dx: Float, dy: Float, quality: Float) {
+    private fun onCameraMotion(reading: CameraMouse.Reading) {
         val gain = CURSOR_GAIN * settings.cameraSensitivity
         val verticalSign = if (settings.cameraInvertY) -1f else 1f
 
         // Below the noise floor this is sensor grain, not movement; passing it
         // on would leave the pointer creeping across the screen on its own.
-        if (hypot(dx, dy) >= NOISE_FLOOR) {
-            connection.move(dx * gain, dy * gain * verticalSign)
+        val moved = reading.usable && hypot(reading.dx, reading.dy) >= NOISE_FLOOR
+        if (moved) {
+            connection.move(reading.dx * gain, reading.dy * gain * verticalSign)
         }
 
         val now = SystemClock.uptimeMillis()
         if (now - lastQualityPost >= QUALITY_INTERVAL_MS) {
             lastQualityPost = now
-            runOnUiThread {
-                if (!isFinishing && !isDestroyed) {
-                    binding.qualityBar.setProgressCompat((quality * 100).roundToInt(), true)
-                }
-            }
+            runOnUiThread { if (!isFinishing && !isDestroyed) showReading(reading) }
         }
+    }
+
+    /**
+     * Puts the real numbers on screen. Whether the camera can see the surface,
+     * how well the frames match, how far it thinks the phone moved, and how
+     * many datagrams have gone out — which between them say exactly where the
+     * chain is broken when the pointer will not move.
+     */
+    private fun showReading(reading: CameraMouse.Reading) {
+        binding.qualityBar.setProgressCompat((reading.quality * 100).roundToInt(), true)
+        binding.diagnosticsText.text = getString(
+            R.string.diagnostics,
+            reading.texture,
+            MotionTracker.MIN_TEXTURE,
+            reading.confidence,
+            reading.dx,
+            reading.dy,
+            connection.packetsSent,
+        )
+        binding.hintText.setText(
+            if (reading.usable) R.string.controls_hint else R.string.surface_too_plain
+        )
     }
 
     private fun toggleTorch() {

@@ -126,6 +126,18 @@
                 android:visibility="gone" />
 
             <TextView
+                android:id="@+id/diagnosticsText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_gravity="bottom"
+                android:alpha="0.45"
+                android:fontFamily="monospace"
+                android:gravity="center"
+                android:paddingBottom="40dp"
+                android:textColor="@color/muted_text"
+                android:textSize="10sp" />
+
+            <TextView
                 android:id="@+id/hintText"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"

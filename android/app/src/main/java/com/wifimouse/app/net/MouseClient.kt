@@ -43,6 +43,10 @@ class MouseClient {
     private val main = Handler(Looper.getMainLooper())
     private val queue = ArrayBlockingQueue<Outgoing>(QUEUE_CAPACITY)
     private val seq = AtomicLong(1)
+    private val sentCount = AtomicLong(0)
+
+    /** Datagrams actually handed to the socket, for the on-screen diagnostics. */
+    val packetsSent: Long get() = sentCount.get()
 
     /**
      * Bumped by every start and stop. A worker whose generation is no longer
@@ -210,6 +214,7 @@ class MouseClient {
     private fun transmit(live: DatagramSocket, payload: ByteArray, era: Int): Boolean {
         return try {
             live.send(DatagramPacket(payload, payload.size))
+            sentCount.incrementAndGet()
             true
         } catch (_: PortUnreachableException) {
             // The host is up but nothing is listening: keep trying so the app

@@ -31,12 +31,25 @@ import java.util.concurrent.Executors
  */
 class CameraMouse(
     private val context: Context,
-    /**
-     * Called on the analysis thread with pointer movement in frame pixels,
-     * already rotated into display orientation, plus a 0..1 tracking quality.
-     */
-    private val onMotion: (dx: Float, dy: Float, quality: Float) -> Unit,
+    /** Called on the analysis thread for every frame after the first. */
+    private val onMotion: (Reading) -> Unit,
 ) {
+
+    /**
+     * What one frame comparison produced.
+     *
+     * [texture] and [confidence] are carried so the app can say *why* it is not
+     * tracking, rather than only that it is not.
+     */
+    data class Reading(
+        /** Pointer movement in frame pixels, rotated into display orientation. */
+        val dx: Float,
+        val dy: Float,
+        val quality: Float,
+        val texture: Float,
+        val confidence: Float,
+        val usable: Boolean,
+    )
 
     private val executor = Executors.newSingleThreadExecutor { runnable ->
         Thread(runnable, "wifimouse-vision").apply { isDaemon = true }
@@ -113,13 +126,23 @@ class CameraMouse(
 
             if (havePrevious) {
                 val result = tracker.track(previous, current)
-                if (result.usable) {
-                    val (dx, dy) = toDisplaySpace(result.dx, result.dy, image.imageInfo.rotationDegrees)
+                val movement = if (result.usable) {
                     // The picture slides one way when the phone goes the other.
-                    onMotion(-dx, -dy, result.quality)
+                    val (dx, dy) = toDisplaySpace(result.dx, result.dy, image.imageInfo.rotationDegrees)
+                    -dx to -dy
                 } else {
-                    onMotion(0f, 0f, result.quality)
+                    0f to 0f
                 }
+                onMotion(
+                    Reading(
+                        dx = movement.first,
+                        dy = movement.second,
+                        quality = result.quality,
+                        texture = result.texture,
+                        confidence = result.confidence,
+                        usable = result.usable,
+                    )
+                )
             }
 
             val spare = previous

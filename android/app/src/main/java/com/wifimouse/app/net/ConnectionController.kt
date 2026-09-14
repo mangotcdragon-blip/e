@@ -74,6 +74,8 @@ class ConnectionController(
 
     // -- input ------------------------------------------------------------- #
 
+    val packetsSent: Long get() = client.packetsSent
+
     fun move(dx: Float, dy: Float) = client.move(dx, dy)
 
     fun scroll(dx: Float, dy: Float) = client.scroll(dx, dy)
