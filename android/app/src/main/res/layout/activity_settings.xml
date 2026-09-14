@@ -85,21 +85,7 @@
 
             <TextView
                 style="@style/SectionHeading"
-                android:text="@string/settings_pointer" />
-
-            <TextView
-                android:id="@+id/sensitivityLabel"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:textAppearance="?attr/textAppearanceBodyMedium" />
-
-            <com.google.android.material.slider.Slider
-                android:id="@+id/sensitivitySlider"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:stepSize="0.1"
-                android:valueFrom="0.4"
-                android:valueTo="4.0" />
+                android:text="@string/settings_scrolling" />
 
             <TextView
                 android:id="@+id/scrollLabel"
@@ -114,15 +100,6 @@
                 android:stepSize="0.1"
                 android:valueFrom="0.2"
                 android:valueTo="4.0" />
-
-            <com.google.android.material.materialswitch.MaterialSwitch
-                android:id="@+id/accelerationSwitch"
-                style="@style/SettingSwitch"
-                android:text="@string/settings_acceleration" />
-
-            <TextView
-                style="@style/SettingSummary"
-                android:text="@string/settings_acceleration_summary" />
 
             <com.google.android.material.materialswitch.MaterialSwitch
                 android:id="@+id/naturalScrollSwitch"
@@ -154,11 +131,6 @@
             <TextView
                 style="@style/SectionHeading"
                 android:text="@string/settings_behaviour" />
-
-            <com.google.android.material.materialswitch.MaterialSwitch
-                android:id="@+id/tapToClickSwitch"
-                style="@style/SettingSwitch"
-                android:text="@string/settings_tap_to_click" />
 
             <com.google.android.material.materialswitch.MaterialSwitch
                 android:id="@+id/hapticsSwitch"

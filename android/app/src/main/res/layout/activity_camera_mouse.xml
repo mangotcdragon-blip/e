@@ -1,172 +1,349 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Laid out for a phone held like a mouse: palm over the lower half, index and
-  middle fingers reaching the top. So the buttons live at the top and the
-  controls at the bottom, where a resting palm cannot press them.
+  A mouse, drawn on a phone: two buttons and a wheel across the top third where
+  fingertips land, and nothing at all below them.
+
+  palmGuard is the first child, so it sits underneath everything and catches any
+  touch the views above decline — which is all of them except the buttons and
+  the wheel. A child consuming the touch (rather than the root doing it) is what
+  keeps split-touch dispatch alive, so a palm already resting on the glass never
+  stops a finger from pressing a button.
 -->
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="?attr/colorSurface"
-    android:orientation="vertical">
+    android:background="@color/mouse_surface">
+
+    <View
+        android:id="@+id/palmGuard"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:clickable="true"
+        android:contentDescription="@string/palm_guard_description"
+        android:focusable="false" />
 
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="3"
-        android:baselineAligned="false"
-        android:minHeight="120dp"
-        android:orientation="horizontal"
-        android:padding="10dp">
+        android:layout_height="match_parent"
+        android:orientation="vertical">
 
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/leftButton"
-            style="@style/MouseButton"
-            android:layout_width="0dp"
-            android:layout_height="match_parent"
-            android:layout_weight="1"
-            android:text="@string/button_left" />
-
-        <com.wifimouse.app.ui.ScrollWheelView
-            android:id="@+id/wheel"
-            android:layout_width="62dp"
-            android:layout_height="match_parent"
-            android:layout_marginStart="8dp"
-            android:layout_marginEnd="8dp"
-            android:contentDescription="@string/wheel_description" />
-
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/rightButton"
-            style="@style/MouseButton"
-            android:layout_width="0dp"
-            android:layout_height="match_parent"
-            android:layout_weight="1"
-            android:text="@string/button_right" />
-    </LinearLayout>
-
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:gravity="center_vertical"
-        android:orientation="horizontal"
-        android:paddingStart="16dp"
-        android:paddingEnd="16dp">
-
-        <View
-            android:id="@+id/statusDot"
-            android:layout_width="10dp"
-            android:layout_height="10dp"
-            android:background="@drawable/status_dot" />
-
-        <TextView
-            android:id="@+id/statusText"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="10dp"
-            android:layout_weight="1"
-            android:ellipsize="end"
-            android:maxLines="1"
-            android:text="@string/status_offline"
-            android:textAppearance="?attr/textAppearanceBodySmall" />
-
-        <TextView
-            android:id="@+id/trackingLabel"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginEnd="8dp"
-            android:text="@string/tracking"
-            android:textAppearance="?attr/textAppearanceBodySmall" />
-
-        <com.google.android.material.progressindicator.LinearProgressIndicator
-            android:id="@+id/qualityBar"
-            android:layout_width="76dp"
-            android:layout_height="wrap_content"
-            app:trackCornerRadius="3dp"
-            app:trackThickness="6dp" />
-    </LinearLayout>
-
-    <com.google.android.material.card.MaterialCardView
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_margin="12dp"
-        android:layout_weight="4"
-        app:cardCornerRadius="18dp"
-        app:strokeColor="@color/touchpad_border"
-        app:strokeWidth="1dp">
-
-        <FrameLayout
+        <LinearLayout
             android:layout_width="match_parent"
-            android:layout_height="match_parent">
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingStart="24dp"
+            android:paddingTop="10dp"
+            android:paddingEnd="24dp">
 
-            <androidx.camera.view.PreviewView
-                android:id="@+id/preview"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:clickable="false"
-                android:focusable="false" />
+            <View
+                android:id="@+id/statusDot"
+                android:layout_width="8dp"
+                android:layout_height="8dp"
+                android:background="@drawable/status_dot" />
 
             <TextView
-                android:id="@+id/cameraHint"
-                android:layout_width="match_parent"
+                android:id="@+id/statusText"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="9dp"
+                android:layout_weight="1"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:text="@string/status_offline"
+                android:textColor="@color/muted_text"
+                android:textSize="12sp" />
+
+            <com.google.android.material.progressindicator.LinearProgressIndicator
+                android:id="@+id/qualityBar"
+                android:layout_width="44dp"
+                android:layout_height="wrap_content"
+                app:trackCornerRadius="2dp"
+                app:trackThickness="4dp" />
+        </LinearLayout>
+
+        <Space
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="2" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="3"
+            android:baselineAligned="false"
+            android:minHeight="132dp"
+            android:orientation="horizontal"
+            android:paddingStart="18dp"
+            android:paddingEnd="18dp">
+
+            <View
+                android:id="@+id/leftButton"
+                android:layout_width="0dp"
                 android:layout_height="match_parent"
-                android:background="@color/touchpad_surface"
+                android:layout_weight="1.62"
+                android:background="@drawable/mouse_button"
+                android:clickable="true"
+                android:contentDescription="@string/button_left"
+                android:focusable="true" />
+
+            <com.wifimouse.app.ui.ScrollWheelView
+                android:id="@+id/wheel"
+                android:layout_width="60dp"
+                android:layout_height="match_parent"
+                android:layout_marginStart="14dp"
+                android:layout_marginEnd="14dp"
+                android:contentDescription="@string/wheel_description" />
+
+            <View
+                android:id="@+id/rightButton"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:background="@drawable/mouse_button"
+                android:clickable="true"
+                android:contentDescription="@string/button_right"
+                android:focusable="true" />
+        </LinearLayout>
+
+        <!-- Palm territory. Nothing here reacts to touch. -->
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="11">
+
+            <TextView
+                android:id="@+id/messageText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
                 android:gravity="center"
-                android:padding="20dp"
-                android:text="@string/camera_permission_needed"
-                android:textAppearance="?attr/textAppearanceBodyMedium" />
+                android:paddingStart="36dp"
+                android:paddingEnd="36dp"
+                android:textColor="@color/muted_text"
+                android:textSize="13sp"
+                android:visibility="gone" />
+
+            <TextView
+                android:id="@+id/hintText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_gravity="bottom"
+                android:alpha="0.5"
+                android:gravity="center"
+                android:paddingBottom="18dp"
+                android:text="@string/controls_hint"
+                android:textColor="@color/muted_text"
+                android:textSize="11sp" />
         </FrameLayout>
-    </com.google.android.material.card.MaterialCardView>
-
-    <TextView
-        android:id="@+id/speedLabel"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:paddingStart="20dp"
-        android:paddingEnd="20dp"
-        android:textAppearance="?attr/textAppearanceBodySmall" />
-
-    <com.google.android.material.slider.Slider
-        android:id="@+id/speedSlider"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:paddingStart="16dp"
-        android:paddingEnd="16dp"
-        android:stepSize="0.1"
-        android:valueFrom="0.2"
-        android:valueTo="4.0" />
-
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:paddingStart="10dp"
-        android:paddingTop="2dp"
-        android:paddingEnd="10dp"
-        android:paddingBottom="10dp">
-
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/backButton"
-            style="@style/Widget.Material3.Button.TextButton"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="@string/trackpad_mode" />
-
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/torchButton"
-            style="@style/Widget.Material3.Button.TextButton"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="@string/torch_on" />
-
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/focusButton"
-            style="@style/Widget.Material3.Button.TextButton"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="@string/refocus" />
     </LinearLayout>
-</LinearLayout>
+
+    <ScrollView
+        android:id="@+id/controlsPanel"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@color/mouse_surface"
+        android:visibility="gone">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="16dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/connectButton"
+                    style="@style/Widget.Material3.Button.OutlinedButton"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginEnd="6dp"
+                    android:layout_weight="1"
+                    android:text="@string/connect" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/findButton"
+                    style="@style/Widget.Material3.Button.OutlinedButton"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/find_pc" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:orientation="horizontal">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/torchButton"
+                    style="@style/Widget.Material3.Button.TextButton"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/torch_on" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/focusButton"
+                    style="@style/Widget.Material3.Button.TextButton"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/refocus" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/keyboardButton"
+                    style="@style/Widget.Material3.Button.TextButton"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/keyboard" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/speedLabel"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingStart="8dp"
+                android:paddingTop="6dp"
+                android:paddingEnd="8dp"
+                android:textAppearance="?attr/textAppearanceBodySmall" />
+
+            <com.google.android.material.slider.Slider
+                android:id="@+id/speedSlider"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:stepSize="0.1"
+                android:valueFrom="0.2"
+                android:valueTo="4.0" />
+
+            <LinearLayout
+                android:id="@+id/keyboardArea"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:visibility="gone">
+
+                <com.google.android.material.textfield.TextInputLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:hint="@string/type_hint">
+
+                    <com.google.android.material.textfield.TextInputEditText
+                        android:id="@+id/keyInput"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:imeOptions="actionSend|flagNoFullscreen"
+                        android:inputType="textNoSuggestions"
+                        android:maxLines="1" />
+                </com.google.android.material.textfield.TextInputLayout>
+
+                <HorizontalScrollView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:scrollbars="none">
+
+                    <LinearLayout
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal">
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/keyEsc"
+                            style="@style/KeyButton"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="@string/key_esc" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/keyTab"
+                            style="@style/KeyButton"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="@string/key_tab" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/keyLeft"
+                            style="@style/KeyButton"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="@string/key_left" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/keyUp"
+                            style="@style/KeyButton"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="@string/key_up" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/keyDown"
+                            style="@style/KeyButton"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="@string/key_down" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/keyRight"
+                            style="@style/KeyButton"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="@string/key_right" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/keyBackspace"
+                            style="@style/KeyButton"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="@string/key_backspace" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/keyEnter"
+                            style="@style/KeyButton"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="@string/key_enter" />
+                    </LinearLayout>
+                </HorizontalScrollView>
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:orientation="horizontal">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/settingsButton"
+                    style="@style/Widget.Material3.Button.TextButton"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/settings" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/helpButton"
+                    style="@style/Widget.Material3.Button.TextButton"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/help" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/closeControlsButton"
+                    style="@style/Widget.Material3.Button.TextButton"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/close" />
+            </LinearLayout>
+        </LinearLayout>
+    </ScrollView>
+</FrameLayout>

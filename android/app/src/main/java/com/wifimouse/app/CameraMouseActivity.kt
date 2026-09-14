@@ -1,28 +1,47 @@
 package com.wifimouse.app
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Rect
+import android.os.Build
 import android.os.Bundle
 import android.os.SystemClock
+import android.text.Editable
+import android.text.TextWatcher
+import android.view.GestureDetector
 import android.view.MotionEvent
 import android.view.View
+import android.view.inputmethod.InputMethodManager
+import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import com.google.android.material.button.MaterialButton
 import com.wifimouse.app.databinding.ActivityCameraMouseBinding
 import com.wifimouse.app.net.ConnectionController
+import com.wifimouse.app.net.Discovery
+import com.wifimouse.app.net.MouseClient
+import com.wifimouse.app.net.Protocol
 import com.wifimouse.app.vision.CameraMouse
 import kotlin.math.hypot
 import kotlin.math.roundToInt
 
 /**
- * Mouse mode: hold the phone like a mouse and slide it around.
+ * The whole app: a phone held like a mouse.
  *
  * The rear camera does what an optical mouse's sensor does — watches the
  * surface go past and turns that into pointer movement — while the buttons sit
  * under your fingers at the top of the screen with a scroll wheel between them.
+ *
+ * Nothing below the buttons reacts to touch, so the hand holding the phone can
+ * rest on the glass. The controls are behind a deliberate double-tap, which a
+ * resting palm cannot produce.
  */
 class CameraMouseActivity : AppCompatActivity() {
 
@@ -33,6 +52,10 @@ class CameraMouseActivity : AppCompatActivity() {
 
     private var cameraRunning = false
     private var lastQualityPost = 0L
+
+    /** Mirror of the text field, used to turn edits into keystrokes. */
+    private var typedSoFar = ""
+    private var suppressTextWatcher = false
 
     private val requestCamera =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
@@ -46,16 +69,93 @@ class CameraMouseActivity : AppCompatActivity() {
 
         settings = Settings(this)
         connection = ConnectionController(this, settings, binding.statusDot, binding.statusText)
+        connection.onState = ::renderConnection
 
         cameraMouse = CameraMouse(this, ::onCameraMotion)
 
+        goImmersive()
+        claimEdgeGestures()
+        setUpPalmGuard()
+        setUpMouseControls()
+        setUpControlsPanel()
+        setUpBackHandling()
+
+        renderConnection(MouseClient.State.Idle)
+    }
+
+    /**
+     * Hides the system bars and claims the screen edges.
+     *
+     * Swallowing touches is only half of resting a palm on the phone: the other
+     * half is Android's own gesture handling, which will happily read the heel
+     * of a hand near an edge as a back swipe and close the app. Immersive mode
+     * takes the bars away, and the exclusion rects tell the system to leave
+     * edge gestures to us. The bars are still one swipe away when wanted.
+     */
+    private fun goImmersive() {
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        WindowCompat.getInsetsController(window, binding.root).apply {
+            hide(WindowInsetsCompat.Type.systemBars())
+            systemBarsBehavior =
+                WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        }
+
+        // A notch or punch-hole still has to be avoided even with the bars gone.
+        ViewCompat.setOnApplyWindowInsetsListener(binding.root) { view, insets ->
+            val cutout = insets.getInsets(WindowInsetsCompat.Type.displayCutout())
+            view.setPadding(cutout.left, cutout.top, cutout.right, 0)
+            insets
+        }
+    }
+
+    /** Re-hides the bars after a transient swipe brings them back. */
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) goImmersive()
+    }
+
+    /**
+     * Asks the system not to treat touches near the edges as navigation
+     * gestures. Android caps how much of an edge an app may claim, so this
+     * reduces stray back swipes rather than abolishing them.
+     */
+    private fun claimEdgeGestures() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return
+        binding.root.addOnLayoutChangeListener { view, _, _, _, _, _, _, _, _ ->
+            view.systemGestureExclusionRects = listOf(Rect(0, 0, view.width, view.height))
+        }
+    }
+
+    // -- touch handling ---------------------------------------------------- #
+
+    /**
+     * The guard swallows every touch below the buttons. It only listens for a
+     * double-tap, which is the one gesture a hand resting on the screen will
+     * not produce by accident.
+     */
+    private fun setUpPalmGuard() {
+        val detector = GestureDetector(this, object : GestureDetector.SimpleOnGestureListener() {
+            override fun onDown(event: MotionEvent) = true
+
+            override fun onDoubleTap(event: MotionEvent): Boolean {
+                showControls(true)
+                return true
+            }
+        })
+        binding.palmGuard.setOnTouchListener { _, event ->
+            detector.onTouchEvent(event)
+            true // consumed either way: nothing here is meant to be pressable
+        }
+    }
+
+    private fun setUpMouseControls() {
         bindMouseButton(binding.leftButton, 'l')
         bindMouseButton(binding.rightButton, 'r')
 
         with(binding.wheel) {
             hapticsEnabled = settings.haptics
-            wheelColor = ContextCompat.getColor(this@CameraMouseActivity, R.color.touchpad_surface)
-            ribColor = ContextCompat.getColor(this@CameraMouseActivity, R.color.touchpad_hint)
+            wheelColor = ContextCompat.getColor(this@CameraMouseActivity, R.color.wheel_body)
+            ribColor = ContextCompat.getColor(this@CameraMouseActivity, R.color.wheel_rib)
             onNotch = { notches ->
                 val direction = if (settings.naturalScroll) -1 else 1
                 connection.scroll(0f, notches * settings.scrollSpeed * direction)
@@ -63,13 +163,44 @@ class CameraMouseActivity : AppCompatActivity() {
             // Pressing a real wheel is a middle click, so this one does too.
             onWheelClick = { connection.click('m') }
         }
+    }
 
-        binding.backButton.setOnClickListener { finish() }
-        binding.focusButton.setOnClickListener { cameraMouse.refocus() }
+    /** Held for as long as your finger is down, exactly like a real button. */
+    private fun bindMouseButton(view: View, button: Char) {
+        view.setOnTouchListener { target, event ->
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    target.isPressed = true
+                    connection.press(button)
+                }
+
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    target.isPressed = false
+                    connection.release(button)
+                }
+            }
+            true
+        }
+        view.setOnClickListener { connection.click(button) }
+    }
+
+    // -- controls panel ---------------------------------------------------- #
+
+    private fun setUpControlsPanel() {
+        binding.connectButton.setOnClickListener {
+            if (connection.isLive) connection.disconnect() else if (!connection.connect()) discover()
+        }
+        binding.findButton.setOnClickListener { discover() }
         binding.torchButton.setOnClickListener { toggleTorch() }
-        binding.trackingLabel.setOnClickListener { showHelp() }
-        binding.qualityBar.max = 100
+        binding.focusButton.setOnClickListener { cameraMouse.refocus() }
+        binding.settingsButton.setOnClickListener {
+            startActivity(Intent(this, SettingsActivity::class.java))
+        }
+        binding.helpButton.setOnClickListener { showHelp() }
+        binding.closeControlsButton.setOnClickListener { showControls(false) }
+        binding.keyboardButton.setOnClickListener { toggleKeyboard() }
 
+        binding.qualityBar.max = 100
         binding.speedSlider.valueFrom = Settings.MIN_CAMERA_SENSITIVITY
         binding.speedSlider.valueTo = Settings.MAX_CAMERA_SENSITIVITY
         binding.speedSlider.value = settings.cameraSensitivity
@@ -80,8 +211,59 @@ class CameraMouseActivity : AppCompatActivity() {
             showSpeed(value)
         }
 
+        bindKey(binding.keyEsc, "esc")
+        bindKey(binding.keyTab, "tab")
+        bindKey(binding.keyLeft, "left")
+        bindKey(binding.keyUp, "up")
+        bindKey(binding.keyDown, "down")
+        bindKey(binding.keyRight, "right")
+        bindKey(binding.keyBackspace, "backspace")
+        binding.keyEnter.setOnClickListener {
+            connection.key("enter")
+            resetTypedText()
+        }
+
+        binding.keyInput.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit
+            override fun afterTextChanged(s: Editable?) {
+                if (!suppressTextWatcher) sendTextDiff(s?.toString() ?: "")
+            }
+        })
+        binding.keyInput.setOnEditorActionListener { _, _, _ ->
+            connection.key("enter")
+            resetTypedText()
+            true
+        }
+
         updateTorchButton()
     }
+
+    /** The guard steps aside while the panel is up, so its controls can be used. */
+    private fun showControls(visible: Boolean) {
+        binding.controlsPanel.visibility = if (visible) View.VISIBLE else View.GONE
+        binding.palmGuard.visibility = if (visible) View.GONE else View.VISIBLE
+        if (!visible) hideKeyboard()
+    }
+
+    private val controlsVisible: Boolean
+        get() = binding.controlsPanel.visibility == View.VISIBLE
+
+    /** Back closes the controls panel first, then leaves the app. */
+    private fun setUpBackHandling() {
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                if (controlsVisible) {
+                    showControls(false)
+                } else {
+                    isEnabled = false
+                    onBackPressedDispatcher.onBackPressed()
+                }
+            }
+        })
+    }
+
+    // -- lifecycle --------------------------------------------------------- #
 
     override fun onResume() {
         super.onResume()
@@ -103,6 +285,64 @@ class CameraMouseActivity : AppCompatActivity() {
         connection.destroy()
     }
 
+    // -- connection -------------------------------------------------------- #
+
+    private fun renderConnection(state: MouseClient.State) {
+        val live = state is MouseClient.State.Connected || state is MouseClient.State.Connecting
+        binding.connectButton.setText(if (live) R.string.disconnect else R.string.connect)
+    }
+
+    private fun discover() {
+        val dialog = AlertDialog.Builder(this)
+            .setTitle(R.string.find_pc)
+            .setMessage(R.string.searching)
+            .setCancelable(true)
+            .show()
+
+        Discovery.search(settings.port) { servers ->
+            // The search outlives the screen if the user backs out mid-way.
+            if (isFinishing || isDestroyed) return@search
+            dialog.dismiss()
+            if (servers.isEmpty()) {
+                AlertDialog.Builder(this)
+                    .setTitle(R.string.find_pc)
+                    .setMessage(getString(R.string.none_found, settings.port))
+                    .setPositiveButton(R.string.ok, null)
+                    .show()
+                return@search
+            }
+            if (servers.size == 1) {
+                useServer(servers.first())
+                return@search
+            }
+            val labels = servers
+                .map { getString(R.string.server_entry, it.name, it.host) }
+                .toTypedArray()
+            AlertDialog.Builder(this)
+                .setTitle(R.string.choose_pc)
+                .setItems(labels) { _, index -> useServer(servers[index]) }
+                .setNegativeButton(R.string.cancel, null)
+                .show()
+        }
+    }
+
+    private fun useServer(server: Protocol.ServerInfo) {
+        settings.host = server.host
+        settings.port = server.port
+        if (server.needsToken && settings.token.isEmpty()) {
+            AlertDialog.Builder(this)
+                .setTitle(R.string.find_pc)
+                .setMessage(getString(R.string.needs_code, server.name))
+                .setPositiveButton(R.string.settings) { _, _ ->
+                    startActivity(Intent(this, SettingsActivity::class.java))
+                }
+                .setNegativeButton(R.string.cancel, null)
+                .show()
+            return
+        }
+        connection.connect()
+    }
+
     // -- camera ------------------------------------------------------------ #
 
     private fun hasCameraPermission() =
@@ -112,12 +352,12 @@ class CameraMouseActivity : AppCompatActivity() {
     private fun requestPermissionOrExplain() {
         if (shouldShowRequestPermissionRationale(Manifest.permission.CAMERA)) {
             AlertDialog.Builder(this)
-                .setTitle(R.string.camera_mouse)
+                .setTitle(R.string.app_name)
                 .setMessage(R.string.camera_permission_needed)
                 .setPositiveButton(R.string.grant_camera) { _, _ ->
                     requestCamera.launch(Manifest.permission.CAMERA)
                 }
-                .setNegativeButton(R.string.cancel) { _, _ -> finish() }
+                .setNegativeButton(R.string.cancel, null)
                 .show()
         } else {
             requestCamera.launch(Manifest.permission.CAMERA)
@@ -127,19 +367,24 @@ class CameraMouseActivity : AppCompatActivity() {
     private fun startCamera() {
         if (cameraRunning) return
         cameraRunning = true
-        binding.cameraHint.visibility = View.GONE
+        showMessage(null)
         if (settings.cameraTorch) cameraMouse.setTorch(true)
-        cameraMouse.start(this, binding.preview) { reason ->
+        cameraMouse.start(this) { reason ->
             cameraRunning = false
-            binding.cameraHint.visibility = View.VISIBLE
-            binding.cameraHint.text = getString(R.string.camera_failed, reason)
+            showMessage(getString(R.string.camera_failed, reason))
         }
         updateTorchButton()
     }
 
     private fun showPermissionRefused() {
-        binding.cameraHint.visibility = View.VISIBLE
-        binding.cameraHint.setText(R.string.camera_permission_denied)
+        showMessage(getString(R.string.camera_permission_denied))
+    }
+
+    /** The empty half of the screen doubles as the only place for a message. */
+    private fun showMessage(text: String?) {
+        binding.messageText.text = text.orEmpty()
+        binding.messageText.visibility = if (text == null) View.GONE else View.VISIBLE
+        binding.hintText.visibility = if (text == null) View.VISIBLE else View.GONE
     }
 
     /**
@@ -191,25 +436,57 @@ class CameraMouseActivity : AppCompatActivity() {
             .show()
     }
 
-    // -- buttons ----------------------------------------------------------- #
+    // -- keyboard ---------------------------------------------------------- #
 
-    /** Held for as long as your finger is down, exactly like a real button. */
-    private fun bindMouseButton(view: MaterialButton, button: Char) {
-        view.setOnTouchListener { target, event ->
-            when (event.actionMasked) {
-                MotionEvent.ACTION_DOWN -> {
-                    target.isPressed = true
-                    connection.press(button)
-                }
+    private fun bindKey(view: MaterialButton, name: String) {
+        view.setOnClickListener { connection.key(name) }
+    }
 
-                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                    target.isPressed = false
-                    connection.release(button)
-                }
-            }
-            true
+    private fun toggleKeyboard() {
+        val showing = binding.keyboardArea.visibility == View.VISIBLE
+        binding.keyboardArea.visibility = if (showing) View.GONE else View.VISIBLE
+        if (showing) {
+            hideKeyboard()
+        } else {
+            resetTypedText()
+            binding.keyInput.requestFocus()
+            getSystemService(InputMethodManager::class.java)
+                ?.showSoftInput(binding.keyInput, InputMethodManager.SHOW_IMPLICIT)
         }
-        view.setOnClickListener { connection.click(button) }
+    }
+
+    private fun hideKeyboard() {
+        getSystemService(InputMethodManager::class.java)
+            ?.hideSoftInputFromWindow(binding.keyInput.windowToken, 0)
+        binding.keyInput.clearFocus()
+    }
+
+    /**
+     * Turns edits in the text field into keystrokes. Diffing against the
+     * previous value is what makes backspace and autocorrect work: soft
+     * keyboards do not report key presses, only the resulting text.
+     */
+    private fun sendTextDiff(next: String) {
+        if (next == typedSoFar) return
+
+        var shared = 0
+        while (shared < next.length && shared < typedSoFar.length && next[shared] == typedSoFar[shared]) {
+            shared++
+        }
+        repeat(typedSoFar.length - shared) { connection.key("backspace") }
+        val added = next.substring(shared)
+        if (added.isNotEmpty()) connection.type(added)
+        typedSoFar = next
+
+        if (next.length > TYPED_BUFFER_LIMIT) resetTypedText()
+    }
+
+    /** Empties the field without the watcher mistaking it for a backspace run. */
+    private fun resetTypedText() {
+        suppressTextWatcher = true
+        binding.keyInput.setText("")
+        suppressTextWatcher = false
+        typedSoFar = ""
     }
 
     private companion object {
@@ -223,5 +500,6 @@ class CameraMouseActivity : AppCompatActivity() {
         const val NOISE_FLOOR = 0.08f
 
         const val QUALITY_INTERVAL_MS = 150L
+        const val TYPED_BUFFER_LIMIT = 120
     }
 }

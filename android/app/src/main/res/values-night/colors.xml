@@ -4,4 +4,14 @@
     <color name="touchpad_border">#FF31343C</color>
     <color name="touchpad_hint">#FF9BA1AC</color>
     <color name="touchpad_touch">#4D7C93FF</color>
+
+    <color name="mouse_surface">#FF101216</color>
+    <color name="mouse_button_top">#FF23262E</color>
+    <color name="mouse_button_bottom">#FF1A1C22</color>
+    <color name="mouse_button_stroke">#FF333742</color>
+    <color name="mouse_button_pressed">#FF26305A</color>
+    <color name="mouse_button_stroke_pressed">#FF7C93FF</color>
+    <color name="wheel_body">#FF191B21</color>
+    <color name="wheel_rib">#FF737C90</color>
+    <color name="muted_text">#FF868E9E</color>
 </resources>

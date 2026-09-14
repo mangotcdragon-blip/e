@@ -9,6 +9,17 @@
     <color name="touchpad_hint">#FF6B7280</color>
     <color name="touchpad_touch">#333E63DD</color>
 
+    <!-- The mouse itself -->
+    <color name="mouse_surface">#FFF3F5F9</color>
+    <color name="mouse_button_top">#FFFFFFFF</color>
+    <color name="mouse_button_bottom">#FFEFF2F8</color>
+    <color name="mouse_button_stroke">#FFD8DEEA</color>
+    <color name="mouse_button_pressed">#FFDCE4FF</color>
+    <color name="mouse_button_stroke_pressed">#FF3E63DD</color>
+    <color name="wheel_body">#FFE6EAF3</color>
+    <color name="wheel_rib">#FF9AA4BA</color>
+    <color name="muted_text">#FF7A8398</color>
+
     <color name="status_connected">#FF1DA462</color>
     <color name="status_pending">#FFE0A21A</color>
     <color name="status_offline">#FF9AA1AE</color>

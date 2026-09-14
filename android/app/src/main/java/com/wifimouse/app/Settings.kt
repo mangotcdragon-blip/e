@@ -23,28 +23,32 @@ class Settings(context: Context) {
         get() = prefs.getString(KEY_TOKEN, "") ?: ""
         set(value) = prefs.edit().putString(KEY_TOKEN, value.trim()).apply()
 
-    /** Pointer speed multiplier. */
-    var sensitivity: Float
-        get() = prefs.getFloat(KEY_SENSITIVITY, 1.6f)
-        set(value) = prefs.edit().putFloat(KEY_SENSITIVITY, value.coerceIn(MIN_SENSITIVITY, MAX_SENSITIVITY)).apply()
-
+    /** How far one notch of the wheel scrolls. */
     var scrollSpeed: Float
         get() = prefs.getFloat(KEY_SCROLL_SPEED, 1.0f)
         set(value) = prefs.edit().putFloat(KEY_SCROLL_SPEED, value.coerceIn(MIN_SCROLL, MAX_SCROLL)).apply()
 
-    /** Content follows the fingers, like a phone, rather than like a wheel. */
+    /** Content follows the wheel, like a phone, rather than like a mouse. */
     var naturalScroll: Boolean
         get() = prefs.getBoolean(KEY_NATURAL_SCROLL, true)
         set(value) = prefs.edit().putBoolean(KEY_NATURAL_SCROLL, value).apply()
 
-    /** Speed-dependent pointer gain, so small swipes stay precise. */
-    var acceleration: Boolean
-        get() = prefs.getBoolean(KEY_ACCELERATION, true)
-        set(value) = prefs.edit().putBoolean(KEY_ACCELERATION, value).apply()
+    /** Pointer speed for the camera. */
+    var cameraSensitivity: Float
+        get() = prefs.getFloat(KEY_CAMERA_SENSITIVITY, 1.0f)
+        set(value) = prefs.edit()
+            .putFloat(KEY_CAMERA_SENSITIVITY, value.coerceIn(MIN_CAMERA_SENSITIVITY, MAX_CAMERA_SENSITIVITY))
+            .apply()
 
-    var tapToClick: Boolean
-        get() = prefs.getBoolean(KEY_TAP_TO_CLICK, true)
-        set(value) = prefs.edit().putBoolean(KEY_TAP_TO_CLICK, value).apply()
+    /** For holding the phone the other way up, or aiming the camera forwards. */
+    var cameraInvertY: Boolean
+        get() = prefs.getBoolean(KEY_CAMERA_INVERT_Y, false)
+        set(value) = prefs.edit().putBoolean(KEY_CAMERA_INVERT_Y, value).apply()
+
+    /** Light the surface under the phone as soon as the app opens. */
+    var cameraTorch: Boolean
+        get() = prefs.getBoolean(KEY_CAMERA_TORCH, false)
+        set(value) = prefs.edit().putBoolean(KEY_CAMERA_TORCH, value).apply()
 
     var haptics: Boolean
         get() = prefs.getBoolean(KEY_HAPTICS, true)
@@ -62,23 +66,6 @@ class Settings(context: Context) {
         get() = prefs.getBoolean(KEY_RESEND, true)
         set(value) = prefs.edit().putBoolean(KEY_RESEND, value).apply()
 
-    /** Pointer speed for camera mode; the trackpad has its own. */
-    var cameraSensitivity: Float
-        get() = prefs.getFloat(KEY_CAMERA_SENSITIVITY, 1.0f)
-        set(value) = prefs.edit()
-            .putFloat(KEY_CAMERA_SENSITIVITY, value.coerceIn(MIN_CAMERA_SENSITIVITY, MAX_CAMERA_SENSITIVITY))
-            .apply()
-
-    /** For holding the phone the other way up, or aiming the camera forwards. */
-    var cameraInvertY: Boolean
-        get() = prefs.getBoolean(KEY_CAMERA_INVERT_Y, false)
-        set(value) = prefs.edit().putBoolean(KEY_CAMERA_INVERT_Y, value).apply()
-
-    /** Light the surface under the phone as soon as camera mode opens. */
-    var cameraTorch: Boolean
-        get() = prefs.getBoolean(KEY_CAMERA_TORCH, false)
-        set(value) = prefs.edit().putBoolean(KEY_CAMERA_TORCH, value).apply()
-
     var autoConnect: Boolean
         get() = prefs.getBoolean(KEY_AUTO_CONNECT, true)
         set(value) = prefs.edit().putBoolean(KEY_AUTO_CONNECT, value).apply()
@@ -86,8 +73,6 @@ class Settings(context: Context) {
     val isConfigured: Boolean get() = host.isNotEmpty()
 
     companion object {
-        const val MIN_SENSITIVITY = 0.4f
-        const val MAX_SENSITIVITY = 4.0f
         const val MIN_SCROLL = 0.2f
         const val MAX_SCROLL = 4.0f
         const val MIN_CAMERA_SENSITIVITY = 0.2f
@@ -96,17 +81,14 @@ class Settings(context: Context) {
         private const val KEY_HOST = "host"
         private const val KEY_PORT = "port"
         private const val KEY_TOKEN = "token"
-        private const val KEY_SENSITIVITY = "sensitivity"
         private const val KEY_SCROLL_SPEED = "scroll_speed"
         private const val KEY_NATURAL_SCROLL = "natural_scroll"
-        private const val KEY_ACCELERATION = "acceleration"
-        private const val KEY_TAP_TO_CLICK = "tap_to_click"
+        private const val KEY_CAMERA_SENSITIVITY = "camera_sensitivity"
+        private const val KEY_CAMERA_INVERT_Y = "camera_invert_y"
+        private const val KEY_CAMERA_TORCH = "camera_torch"
         private const val KEY_HAPTICS = "haptics"
         private const val KEY_KEEP_SCREEN_ON = "keep_screen_on"
         private const val KEY_RESEND = "resend_clicks"
         private const val KEY_AUTO_CONNECT = "auto_connect"
-        private const val KEY_CAMERA_SENSITIVITY = "camera_sensitivity"
-        private const val KEY_CAMERA_INVERT_Y = "camera_invert_y"
-        private const val KEY_CAMERA_TORCH = "camera_torch"
     }
 }

@@ -29,20 +29,14 @@ class SettingsActivity : AppCompatActivity() {
 
         binding.findButton.setOnClickListener { discover() }
 
-        bindSlider(binding.sensitivitySlider, settings.sensitivity) { value ->
-            settings.sensitivity = value
-            binding.sensitivityLabel.text = getString(R.string.settings_sensitivity, value)
-        }
         bindSlider(binding.scrollSlider, settings.scrollSpeed) { value ->
             settings.scrollSpeed = value
             binding.scrollLabel.text = getString(R.string.settings_scroll_speed, value)
         }
 
-        bindSwitch(binding.accelerationSwitch, settings.acceleration) { settings.acceleration = it }
         bindSwitch(binding.naturalScrollSwitch, settings.naturalScroll) { settings.naturalScroll = it }
         bindSwitch(binding.cameraInvertSwitch, settings.cameraInvertY) { settings.cameraInvertY = it }
         bindSwitch(binding.cameraTorchSwitch, settings.cameraTorch) { settings.cameraTorch = it }
-        bindSwitch(binding.tapToClickSwitch, settings.tapToClick) { settings.tapToClick = it }
         bindSwitch(binding.hapticsSwitch, settings.haptics) { settings.haptics = it }
         bindSwitch(binding.keepAwakeSwitch, settings.keepScreenOn) { settings.keepScreenOn = it }
         bindSwitch(binding.autoConnectSwitch, settings.autoConnect) { settings.autoConnect = it }

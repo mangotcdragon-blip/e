@@ -8,11 +8,10 @@ import androidx.camera.core.CameraSelector
 import androidx.camera.core.FocusMeteringAction
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageProxy
-import androidx.camera.core.Preview
+import androidx.camera.core.SurfaceOrientedMeteringPointFactory
 import androidx.camera.core.resolutionselector.ResolutionSelector
 import androidx.camera.core.resolutionselector.ResolutionStrategy
 import androidx.camera.lifecycle.ProcessCameraProvider
-import androidx.camera.view.PreviewView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleOwner
 import java.util.concurrent.Executors
@@ -51,18 +50,16 @@ class CameraMouse(
 
     private var provider: ProcessCameraProvider? = null
     private var camera: Camera? = null
-    private var previewView: PreviewView? = null
 
     @Volatile
     var torchOn: Boolean = false
         private set
 
-    fun start(owner: LifecycleOwner, view: PreviewView, onError: (String) -> Unit) {
-        previewView = view
+    fun start(owner: LifecycleOwner, onError: (String) -> Unit) {
         val future = ProcessCameraProvider.getInstance(context)
         future.addListener({
             try {
-                bind(future.get(), owner, view)
+                bind(future.get(), owner)
             } catch (exc: Exception) {
                 Log.e(TAG, "camera failed to start", exc)
                 onError(exc.message ?: "Camera unavailable")
@@ -70,12 +67,11 @@ class CameraMouse(
         }, ContextCompat.getMainExecutor(context))
     }
 
-    private fun bind(cameraProvider: ProcessCameraProvider, owner: LifecycleOwner, view: PreviewView) {
+    private fun bind(cameraProvider: ProcessCameraProvider, owner: LifecycleOwner) {
         provider = cameraProvider
 
-        val preview = Preview.Builder().build()
-        preview.setSurfaceProvider(view.surfaceProvider)
-
+        // No preview use case: nothing on screen shows the camera, and leaving
+        // it out saves the work of rendering frames nobody looks at.
         val resolution = ResolutionSelector.Builder()
             .setResolutionStrategy(
                 ResolutionStrategy(
@@ -97,7 +93,7 @@ class CameraMouse(
         cameraProvider.unbindAll()
         havePrevious = false
         camera = cameraProvider.bindToLifecycle(
-            owner, CameraSelector.DEFAULT_BACK_CAMERA, preview, analysis,
+            owner, CameraSelector.DEFAULT_BACK_CAMERA, analysis,
         )
         if (torchOn) camera?.cameraControl?.enableTorch(true)
         refocus()
@@ -159,11 +155,11 @@ class CameraMouse(
      * useless here: every hunt blurs the picture and stalls tracking.
      */
     fun refocus() {
-        val view = previewView ?: return
         val control = camera?.cameraControl ?: return
-        if (view.width == 0 || view.height == 0) return
         try {
-            val point = view.meteringPointFactory.createPoint(view.width / 2f, view.height / 2f)
+            // Middle of the frame, expressed in a normalised surface so this
+            // works without a preview on screen.
+            val point = SurfaceOrientedMeteringPointFactory(1f, 1f).createPoint(0.5f, 0.5f)
             control.startFocusAndMetering(
                 FocusMeteringAction.Builder(point, FocusMeteringAction.FLAG_AF)
                     .disableAutoCancel()
@@ -179,7 +175,6 @@ class CameraMouse(
         provider?.unbindAll()
         provider = null
         camera = null
-        previewView = null
         havePrevious = false
     }
 
