@@ -20,11 +20,12 @@ webpage from doing the same doesn't apply to native HTTP clients), so results
 reflect your device's real connection at wherever you're standing.
 
 It tries [speed.cloudflare.com](https://speed.cloudflare.com)'s public
-speed-test backend first, and falls back to a plain static file on
-speed.hetzner.de if that doesn't succeed — some networks put bot protection
-in front of Cloudflare's endpoint that can 403 even a browser-like request,
-so a second, unrelated host keeps the feature working rather than depending
-on one provider.
+speed-test backend first, then falls back in turn to a plain static file on
+Hetzner's network (`fsn1-speed.hetzner.com`) and then OVH's
+(`proof.ovh.net`) if earlier hosts don't succeed — some networks put bot
+protection in front of Cloudflare's endpoint that can 403 even a
+browser-like request, so independent, unrelated hosts keep the feature
+working rather than depending on one provider.
 
 Each test streams for up to ~12 seconds (or until ~100 MB has been
 transferred, whichever comes first) and requires normal internet access —

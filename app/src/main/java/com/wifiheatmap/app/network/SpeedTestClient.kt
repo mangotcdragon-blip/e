@@ -14,12 +14,12 @@ import kotlin.math.max
  * speed-test sites their CORS restriction only matters to browsers, not to a
  * native app, so a plain HTTP client can pull real bytes and time them.
  *
- * Two independent hosts are tried in order: some edge networks put bot
+ * Several independent hosts are tried in order: some edge networks put bot
  * protection in front of endpoints that serve unlimited free bandwidth (seen
  * in practice as an HTTP 403 from Cloudflare's speed-test backend on some
- * connections even with a browser-like request), so a plain static file from
- * a second, unrelated host is used as a fallback rather than letting one
- * provider's block take out the whole feature.
+ * connections even with a browser-like request), so plain static files from
+ * other, unrelated hosts are used as fallbacks rather than letting one
+ * provider's block (or an outage) take out the whole feature.
  */
 object SpeedTestClient {
 
@@ -27,7 +27,8 @@ object SpeedTestClient {
 
     private val ENDPOINTS = listOf(
         Endpoint("https://speed.cloudflare.com/__down?bytes=100000000", "Cloudflare"),
-        Endpoint("https://speed.hetzner.de/100MB.bin", "Hetzner")
+        Endpoint("https://fsn1-speed.hetzner.com/100MB.bin", "Hetzner"),
+        Endpoint("https://proof.ovh.net/files/100Mb.dat", "OVH")
     )
 
     private const val MAX_TEST_DURATION_MS = 12_000L
@@ -57,14 +58,16 @@ object SpeedTestClient {
     suspend fun measureDownloadSpeed(
         onProgress: (bytesSoFar: Long, elapsedMs: Long) -> Unit = { _, _ -> }
     ): SpeedTestResult = withContext(Dispatchers.IO) {
-        var lastFailure: SpeedTestResult.Failure? = null
+        val failures = mutableListOf<String>()
         for (endpoint in ENDPOINTS) {
             when (val result = attempt(endpoint, onProgress)) {
                 is SpeedTestResult.Success -> return@withContext result
-                is SpeedTestResult.Failure -> lastFailure = result
+                is SpeedTestResult.Failure -> failures += result.message
             }
         }
-        lastFailure ?: SpeedTestResult.Failure("No speed test servers available")
+        SpeedTestResult.Failure(
+            failures.ifEmpty { listOf("No speed test servers available") }.joinToString("; ")
+        )
     }
 
     private fun attempt(
