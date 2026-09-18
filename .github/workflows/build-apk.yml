@@ -23,6 +23,12 @@ jobs:
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          # The action's own default package list still requests the long-deprecated legacy
+          # "tools" package, which Google has now fully removed from the SDK repository - every
+          # build was failing before even reaching Gradle because of that, unrelated to app code.
+          # Everything a modern Gradle/AGP build actually needs is covered by these three.
+          packages: "platform-tools platforms;android-35 build-tools;35.0.0"
 
       - name: Make gradlew executable
         run: chmod +x gradlew
