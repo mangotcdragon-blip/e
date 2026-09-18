@@ -7,6 +7,7 @@ import android.os.Build
 import android.provider.MediaStore
 import com.dailytools.calculator.data.model.MediaKind
 import com.dailytools.calculator.data.model.Post
+import com.dailytools.calculator.data.network.RateLimitRetryInterceptor
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -18,15 +19,19 @@ import java.io.FileOutputStream
 import java.nio.ByteBuffer
 import java.nio.channels.FileChannel
 
-private val downloadClient = OkHttpClient()
+private val downloadClient = OkHttpClient.Builder()
+    .addInterceptor(RateLimitRetryInterceptor())
+    .build()
 
 /**
  * Splitting a large-enough file into this many byte ranges and fetching them over separate
  * connections at once - the same trick dedicated download managers use - gets around a single
  * connection's own throughput cap (and any per-connection throttling the source CDN applies),
- * instead of the transfer being stuck however fast just one TCP stream happens to go.
+ * instead of the transfer being stuck however fast just one TCP stream happens to go. Kept modest
+ * (rather than the 8+ a standalone download manager might use) since this runs on top of normal
+ * browsing/preloading traffic to the same hosts, not instead of it.
  */
-private const val MAX_SEGMENTS = 4
+private const val MAX_SEGMENTS = 2
 private const val MIN_SEGMENT_BYTES = 1L * 1024 * 1024
 
 /** Saves a post's full media file into the device's public Pictures/Movies collection. */

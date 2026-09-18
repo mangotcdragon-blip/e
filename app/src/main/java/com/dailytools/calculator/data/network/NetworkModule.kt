@@ -21,6 +21,11 @@ object NetworkModule {
 
     private fun client(userAgent: String): OkHttpClient = OkHttpClient.Builder()
         .addInterceptor(UserAgentInterceptor(userAgent))
+        // e621/Rule34 ask that the search API specifically not be hit more than once a second -
+        // this paces requests instead of firing them all at once, and this client's the one that
+        // needs it since it's the JSON API rather than a media/CDN host.
+        .addInterceptor(MinIntervalInterceptor())
+        .addInterceptor(RateLimitRetryInterceptor())
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(20, TimeUnit.SECONDS)
         .writeTimeout(15, TimeUnit.SECONDS)

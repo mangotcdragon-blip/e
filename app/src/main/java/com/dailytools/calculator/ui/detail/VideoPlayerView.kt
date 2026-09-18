@@ -1,9 +1,5 @@
 package com.dailytools.calculator.ui.detail
 
-import android.content.ActivityNotFoundException
-import android.content.Intent
-import android.net.Uri
-import android.widget.Toast
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -61,9 +57,7 @@ private class FastFailLoadErrorHandlingPolicy : DefaultLoadErrorHandlingPolicy()
 @Composable
 fun VideoPlayerView(
     url: String,
-    networkUrl: String = url,
     isActive: Boolean = true,
-    onLaunchingExternalActivity: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -123,6 +117,14 @@ fun VideoPlayerView(
         }
     }
 
+    // ExoPlayer can't handle this codec (commonly AV1 on hardware lacking a decoder for it) - fall
+    // back to VLC's own bundled software decoder instead, seamlessly: same composable slot, same
+    // fullscreen surface, the user just sees the video play rather than an error or a handoff.
+    if (isUnsupportedFormat) {
+        VlcVideoPlayerView(url = url, isActive = isActive, modifier = modifier)
+        return
+    }
+
     Box(modifier = modifier.fillMaxSize()) {
         AndroidView(
             modifier = Modifier.fillMaxSize(),
@@ -143,26 +145,7 @@ fun VideoPlayerView(
                 modifier = Modifier.align(Alignment.Center),
             )
         }
-        if (hasError && isUnsupportedFormat) {
-            Text(
-                text = "This device can't play this video's format - tap to open in another app",
-                color = Color.White,
-                modifier = Modifier
-                    .align(Alignment.Center)
-                    .clickable {
-                        onLaunchingExternalActivity()
-                        val intent = Intent(Intent.ACTION_VIEW).apply {
-                            setDataAndType(Uri.parse(networkUrl), "video/*")
-                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                        }
-                        try {
-                            context.startActivity(Intent.createChooser(intent, null))
-                        } catch (e: ActivityNotFoundException) {
-                            Toast.makeText(context, "No app found to play this video", Toast.LENGTH_SHORT).show()
-                        }
-                    },
-            )
-        } else if (hasError) {
+        if (hasError) {
             Text(
                 text = "Couldn't load video - tap to retry",
                 color = Color.White,

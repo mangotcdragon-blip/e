@@ -77,6 +77,7 @@ data class BrowserUiState(
     val externalCacheTreeUri: String? = null,
     val forYouEnabled: Boolean = false,
     val forYouTag: String? = null,
+    val blacklistedTags: Set<String> = emptySet(),
 )
 
 class BrowserViewModel(
@@ -93,7 +94,8 @@ class BrowserViewModel(
     init {
         viewModelScope.launch {
             val forYou = runCatching { settingsStore.forYouEnabled.first() }.getOrNull() ?: false
-            uiState = uiState.copy(forYouEnabled = forYou)
+            val blacklist = runCatching { settingsStore.blacklistedTags.first() }.getOrNull() ?: emptySet()
+            uiState = uiState.copy(forYouEnabled = forYou, blacklistedTags = blacklist)
             val session = runCatching { settingsStore.sessionState.first() }.getOrNull()
             if (session != null && session.pagesLoaded > 0) {
                 restoreSession(session)
@@ -106,6 +108,13 @@ class BrowserViewModel(
                 enabled to uri
             }.collect { (enabled, uri) ->
                 uiState = uiState.copy(externalCacheEnabled = enabled, externalCacheTreeUri = uri)
+            }
+        }
+        viewModelScope.launch {
+            // Live so editing the blacklist in Settings takes effect on the very next page load
+            // without needing to leave and re-enter the browser.
+            settingsStore.blacklistedTags.collect { tags ->
+                uiState = uiState.copy(blacklistedTags = tags)
             }
         }
     }
@@ -236,8 +245,13 @@ class BrowserViewModel(
         return topTags.first()
     }
 
-    private fun effectiveQuery(state: BrowserUiState): String =
-        if (state.forYouEnabled) state.forYouTag.orEmpty() else state.appliedQuery
+    /** The manual/For You query plus a "-tag" exclusion for everything blacklisted, in every mode. */
+    private fun effectiveQuery(state: BrowserUiState): String {
+        val base = if (state.forYouEnabled) state.forYouTag.orEmpty() else state.appliedQuery
+        if (state.blacklistedTags.isEmpty()) return base
+        val exclusions = state.blacklistedTags.joinToString(" ") { "-$it" }
+        return if (base.isBlank()) exclusions else "$base $exclusions"
+    }
 
     fun loadMore() {
         if (uiState.isLoading || uiState.isLoadingMore || uiState.endReached) return

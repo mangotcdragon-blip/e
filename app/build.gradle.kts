@@ -89,6 +89,10 @@ dependencies {
     implementation("androidx.media3:media3-exoplayer:1.4.1")
     implementation("androidx.media3:media3-ui:1.4.1")
     implementation("androidx.media3:media3-datasource-okhttp:1.4.1")
+    // Bundles VLC's own full software decoder (the same engine dedicated VLC-style apps use) as
+    // an automatic fallback for videos whose codec the device's hardware can't handle - unlike
+    // ExoPlayer's decoder extensions, this ships as a real prebuilt library, no native build needed.
+    implementation("org.videolan.android:libvlc-all:3.6.3")
 
     // Preferences
     implementation("androidx.datastore:datastore-preferences:1.1.1")

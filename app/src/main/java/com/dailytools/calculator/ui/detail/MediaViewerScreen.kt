@@ -162,9 +162,7 @@ fun MediaViewerScreen(
                 when (post.mediaKind) {
                     MediaKind.VIDEO -> VideoPlayerView(
                         url = resolvedUrl,
-                        networkUrl = post.viewUrl,
                         isActive = page == pagerState.currentPage,
-                        onLaunchingExternalActivity = onLaunchingExternalActivity,
                         modifier = Modifier.fillMaxSize(),
                     )
                     else -> ZoomableImage(

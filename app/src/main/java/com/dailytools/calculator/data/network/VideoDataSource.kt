@@ -21,6 +21,7 @@ import java.util.concurrent.TimeUnit
 object VideoDataSource {
 
     private val sharedClient = OkHttpClient.Builder()
+        .addInterceptor(RateLimitRetryInterceptor())
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(20, TimeUnit.SECONDS)
         .build()

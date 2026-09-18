@@ -46,6 +46,16 @@ class SettingsStore(private val context: Context) {
         val EXTERNAL_CACHE_ENABLED = booleanPreferencesKey("external_cache_enabled")
         val EXTERNAL_CACHE_TREE_URI = stringPreferencesKey("external_cache_tree_uri")
         val FOR_YOU_ENABLED = booleanPreferencesKey("for_you_enabled")
+        val BLACKLISTED_TAGS = stringPreferencesKey("blacklisted_tags")
+    }
+
+    /** Tags to exclude from every search, in every mode - stored space-joined like a query string. */
+    val blacklistedTags: Flow<Set<String>> = context.dataStore.data.map { prefs ->
+        prefs[Keys.BLACKLISTED_TAGS]?.split(' ')?.filter { it.isNotBlank() }?.toSet() ?: emptySet()
+    }
+
+    suspend fun setBlacklistedTags(tags: Set<String>) {
+        context.dataStore.edit { it[Keys.BLACKLISTED_TAGS] = tags.joinToString(" ") }
     }
 
     val forYouEnabled: Flow<Boolean> = context.dataStore.data.map { prefs ->

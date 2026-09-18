@@ -6,6 +6,7 @@ import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import androidx.documentfile.provider.DocumentFile
 import com.dailytools.calculator.data.model.Post
+import com.dailytools.calculator.data.network.RateLimitRetryInterceptor
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
@@ -22,7 +23,9 @@ import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
-private val cacheHttpClient = OkHttpClient()
+private val cacheHttpClient = OkHttpClient.Builder()
+    .addInterceptor(RateLimitRetryInterceptor())
+    .build()
 
 /**
  * A "check the drive first, download and copy a copy there otherwise" cache for the user's
