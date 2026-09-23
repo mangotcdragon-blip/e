@@ -14,9 +14,10 @@
         rerouteDevice: true,
         watchFlux: true,
         toasts: false,
-        allowCallWhileSharing: true,
+        callWhileSharing: false,
     };
     for (const key in defaults) if (store[key] === undefined) store[key] = defaults[key];
+    delete store.allowCallWhileSharing; // v5 setting, replaced by callWhileSharing (off by default)
 
     // Name patterns used to discover Discord's audio routing code at runtime.
     // Discord's internal names change between versions, so nothing is hardcoded to one module.
@@ -71,7 +72,8 @@
     // Real names from NativeAudioManagerModule and NativeTelecomModule.
     PROBE_METHODS.push("setSCORetryCount", "setActiveAudioDevice", "getActiveAudioDevice", "isAvailable",
         "startCall", "setCallActive", "endCall", "reportIncomingCall", "registerIncomingCall",
-        "startBroadcast", "stopBroadcast", "stopBroadcastWithError", "createOwnStreamConnectionWithOptions");
+        "startBroadcast", "stopBroadcast", "stopBroadcastWithError", "createOwnStreamConnectionWithOptions",
+        "setScreenShareState", "setMicMuted", "cancelIncomingCall");
 
     // Discord source files worth scanning, by path.
     const AUDIO_PATH = /audio|voice|speaker|bluetooth|telecom|mediaengine|media_engine|rtc|incall|callkit|connectionservice|\bsco\b|headset/i;
@@ -276,14 +278,14 @@
     const heldCall = { startCall: null, setCallActive: null };
 
     function telecomBlocked() {
-        return store.blockTelecom && !(sharing && store.allowCallWhileSharing);
+        return store.blockTelecom && !(sharing && store.callWhileSharing);
     }
 
     function setSharing(on, where) {
         if (on === sharing) return;
         sharing = on;
         record("share", where, on ? "screen share started" : "screen share stopped");
-        if (!on || !store.blockTelecom || !store.allowCallWhileSharing) return;
+        if (!on || !store.blockTelecom || !store.callWhileSharing) return;
         for (const key of ["startCall", "setCallActive"]) {
             const held = heldCall[key];
             if (!held) continue;
@@ -338,7 +340,11 @@
             } };
         }
         if (key === "startBroadcast" || key === "createOwnStreamConnectionWithOptions") {
-            return { kind: "before", cb() { setSharing(true, where); } };
+            return { kind: "before", cb(args) {
+                // The stream options show whether Discord asked for audio at all.
+                record("call", where, args.map(a => describe(a)).join(", "));
+                setSharing(true, where);
+            } };
         }
         if (key === "stopBroadcast" || key === "stopBroadcastWithError") {
             return { kind: "before", cb() { setSharing(false, where); } };
@@ -347,6 +353,20 @@
             return { kind: "before", cb() {
                 record("call", where, "");
                 heldCall.startCall = heldCall.setCallActive = null;
+            } };
+        }
+        // Discord may have seen the call feature as available before the plugin loaded. It then
+        // still sends updates about a call that was never started, and a failing update (for
+        // example when a screen share starts) can break the rest of what Discord was doing. So
+        // answer them here while the call is blocked.
+        if (telecom && (key === "setScreenShareState" || key === "setMicMuted")) {
+            return { kind: "instead", cb(args, orig) {
+                record("call", where, args.map(a => describe(a)).join(", "));
+                if (telecomBlocked()) {
+                    record("block", where, "no system call running, skipped");
+                    return Promise.resolve();
+                }
+                return orig(...args);
             } };
         }
         if (telecom && key === "isAvailable") {
@@ -368,6 +388,9 @@
                 }
                 return orig(...args);
             } };
+        }
+        if (telecom && !/^(addListener|removeListeners|getConstants)$/.test(key)) {
+            return { kind: "before", cb(args) { record("call", where, args.map(a => describe(a)).join(", ")); } };
         }
         return null;
     }
@@ -682,7 +705,7 @@
 
     function diagnostics() {
         const lines = [];
-        lines.push("BluetoothAudioFix diagnostics v5");
+        lines.push("BluetoothAudioFix diagnostics v6");
         lines.push(`File paths available: ${Object.values(metro.modules || {}).some(m => m && m.__filePath)}`);
         lines.push(`Platform: ${RN.Platform.OS} ${RN.Platform.Version}`);
         lines.push(`Settings: ${JSON.stringify({ ...store })}`);
@@ -749,7 +772,7 @@
                 h(FormDivider),
                 toggle("blockTelecom", "Block system call integration", "Stop Discord from registering the voice chat as a phone call"),
                 h(FormDivider),
-                toggle("allowCallWhileSharing", "Allow it while screen sharing", "Screen share audio needs the system call, so it starts when you share (the call bar appears until you leave the channel)"),
+                toggle("callWhileSharing", "Allow it while screen sharing", "Starts the system call when you share. Only try this if stream audio is missing: it brings back call mode and call quality until you leave"),
             ),
             h(FormSection, { title: "Routing" },
                 toggle("blockSpeaker", "Block forced speaker", "Stop Discord from switching the phone speaker on while call audio is off"),
