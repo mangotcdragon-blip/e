@@ -8,6 +8,12 @@ speaker, even though your Bluetooth earbuds are still connected.
 
 **What the plugin does:**
 
+- Stops Discord from putting the phone into call mode, in three parts, each with its own
+  switch:
+  - **Call mode:** Android's call (communication) audio mode stays on normal.
+  - **Bluetooth call audio (SCO):** the earbuds stay on the media profile, so audio keeps full
+    quality and your mic stays on the phone.
+  - **System call integration:** Discord can't register voice chat as a phone call.
 - Blocks Discord's calls that force the speakerphone on. With call audio off, Android
   then plays audio on the connected Bluetooth device again.
 - If Discord selects the speaker as its output device, the plugin selects your Bluetooth
@@ -36,7 +42,8 @@ names it doesn't recognise:
 1. Open the plugin settings and turn on "Log audio events".
 2. Join a voice channel with call audio off so the audio moves to the speaker.
 3. Tap "Copy diagnostics" and share the text. It shows which functions the plugin found
-   (or that it found none), so the name patterns can be updated.
+   (or that it found none), and every function on Discord's audio modules, so the name
+   patterns can be updated.
 
 To use the speaker on purpose, turn off "Block forced speaker", or turn on
 "Only while Bluetooth is detected".

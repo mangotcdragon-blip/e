@@ -6,6 +6,9 @@
 
     const store = plugin.storage;
     const defaults = {
+        blockCallMode: true,
+        blockSco: true,
+        blockTelecom: true,
         blockSpeaker: true,
         onlyWhenBluetooth: false,
         rerouteDevice: true,
@@ -24,7 +27,17 @@
     const SPEAKER_VALUE = /speaker|builtin_?speaker|loudspeaker/i;
     const BLUETOOTH_VALUE = /bluetooth|a2dp|\bbt\b|bt_|_bt|sco|ble_|headset|earbud|buds|airpods|hearing/i;
     const FLUX_AUDIO = /AUDIO|SPEAKER|OUTPUT_DEVICE|MEDIA_ENGINE_SET|BLUETOOTH|VOICE_DEVICE/i;
-    const MODULE_NAME = /audio|sound|voice|media|rtc|call|speaker|bluetooth|route/i;
+    const MODULE_NAME = /audio|sound|voice|media|rtc|call|speaker|bluetooth|route|telecom|connection/i;
+
+    // Call mode: Android's MODE_IN_COMMUNICATION, the Bluetooth call profile (SCO) and the
+    // system phone call integration (Telecom). Any of these pulls the phone into a call.
+    const ACTIVATE = /^(set|enable|start|enter|use|request|force|begin|activate|update|connect|report|register|add|place|show|display|create)/i;
+    const DEACTIVATE = /^(stop|disable|exit|leave|end|clear|release|reset|disconnect|unregister|remove|hide)/i;
+    const CALL_MODE = /communicationmode|callmode|callaudio|incall|in_call|voicecall|voipmode|audiomode/i;
+    const BARE_MODE = /^set(audio)?mode$/i;
+    const COMM_DEVICE = /^set\w*communicationdevice/i;
+    const SCO = /bluetoothsco|scoaudio|^startsco|^setsco|scoon$/i;
+    const TELECOM = /telecom|connectionservice|phoneaccount|callkit|callkeep|callstyle|ongoingcall|selfmanaged|systemcall|nativecall/i;
 
     const CANDIDATE_NATIVE_NAMES = [
         "DCDAudioManager", "RTNAudioManager", "AudioManager", "AudioManagerModule",
@@ -32,11 +45,16 @@
         "DCDAudioRouteManager", "MediaEngine", "DCDMediaEngine", "MediaEngineModule",
         "NativeMediaEngine", "VoiceEngine", "DiscordVoice", "DCDVoiceEngine", "NativeVoiceModule",
         "InCallManager", "DCDInCallManager", "RTNAudioSession", "AudioSession", "DCDAudioSession",
-        "CallManager", "DCDCallManager", "RTNCallManager",
+        "CallManager", "DCDCallManager", "RTNCallManager", "DCDVoiceModule", "VoiceConnection",
+        "DCDTelecom", "TelecomModule", "DCDTelecomManager", "CallConnectionService",
+        "DCDConnectionService", "RNCallKeep", "DCDCallKeep", "AudioFocus", "DCDAudioFocus",
+        "BluetoothManager", "DCDBluetoothManager", "BluetoothHeadsetModule",
     ];
 
     const unpatches = [];
     const patchedTargets = [];
+    // Every audio-like native module that was found, with all of its functions, for diagnostics.
+    const nativeSeen = {};
     const log = [];
     const MAX_LOG = 80;
 
@@ -125,6 +143,29 @@
         }
     }
 
+    // Returns the arguments that keep the phone out of call mode, or null to skip the call entirely.
+    function callModeArgs(args) {
+        if (args.length === 0) return null;
+        const first = args[0];
+        const next = args.slice();
+        if (first === true) next[0] = false;
+        else if (first === 2 || first === 3) next[0] = 0; // MODE_IN_CALL / MODE_IN_COMMUNICATION -> MODE_NORMAL
+        else if (typeof first === "string" && /communication|call|voip|voice/i.test(first)) {
+            next[0] = /^MODE_/.test(first) ? "MODE_NORMAL" : first === first.toUpperCase() ? "NORMAL" : "normal";
+        }
+        return next;
+    }
+
+    function callModeRule(key, hasAudioContext) {
+        if (DEACTIVATE.test(key) || /^(get|is|has|should|can)/i.test(key)) return null;
+        if (COMM_DEVICE.test(key)) return { setting: "blockCallMode", what: "communication device", drop: true };
+        if (SCO.test(key) && ACTIVATE.test(key)) return { setting: "blockSco", what: "Bluetooth call audio (SCO)" };
+        if (TELECOM.test(key) && ACTIVATE.test(key)) return { setting: "blockTelecom", what: "system call", drop: true };
+        if (CALL_MODE.test(key) && ACTIVATE.test(key)) return { setting: "blockCallMode", what: "call mode" };
+        if (hasAudioContext && BARE_MODE.test(key)) return { setting: "blockCallMode", what: "audio mode" };
+        return null;
+    }
+
     function patchTarget(target, label) {
         if (!target || (typeof target !== "object" && typeof target !== "function")) return;
         if (patchedTargets.some(p => p.target === target)) return;
@@ -146,7 +187,25 @@
             try { fn = target[key]; } catch { continue; }
             if (typeof fn !== "function") continue;
 
-            if (SPEAKER_SETTER.test(key) && !INPUT_ONLY.test(key)) {
+            const rule = callModeRule(key, hasAudioContext);
+            if (rule) {
+                const ok = safePatch("instead", key, target, function (args, orig) {
+                    record("call", `${label}.${key}`, args.map(a => describe(a)).join(", "));
+                    if (!store[rule.setting]) return orig.apply(this, args);
+                    const next = rule.drop && args[0] !== false ? null : callModeArgs(args);
+                    if (next === null) {
+                        record("block", `${label}.${key}`, `${rule.what} skipped`);
+                        notify(`Blocked ${rule.what}`);
+                        return Promise.resolve();
+                    }
+                    if (next.some((v, i) => v !== args[i])) {
+                        record("block", `${label}.${key}`, `${rule.what}: ${describe(args[0])} -> ${describe(next[0])}`);
+                        notify(`Blocked ${rule.what}`);
+                    }
+                    return orig.apply(this, next);
+                });
+                if (ok) methods.push(key);
+            } else if (SPEAKER_SETTER.test(key) && !INPUT_ONLY.test(key)) {
                 const ok = safePatch("instead", key, target, function (args, orig) {
                     record("call", `${label}.${key}`, args.map(a => describe(a)).join(", "));
                     if (args[0] === true && shouldBlockSpeaker()) {
@@ -236,7 +295,15 @@
         } catch {}
         for (const name of names) {
             const mod = getNativeModule(name);
-            if (mod) patchTarget(mod, `Native:${name}`);
+            if (!mod) continue;
+            try {
+                const fns = [];
+                for (const k in mod) if (typeof mod[k] === "function") fns.push(k);
+                nativeSeen[name] = fns;
+            } catch {
+                nativeSeen[name] = ["(could not list)"];
+            }
+            patchTarget(mod, `Native:${name}`);
         }
     }
 
@@ -250,13 +317,14 @@
                 if (keys.length === 0 || keys.length > 200) return false;
                 const speaker = keys.some(k => SPEAKER_SETTER.test(k) && !INPUT_ONLY.test(k));
                 const route = keys.some(k => ROUTE_SETTER.test(k) && AUDIO_CONTEXT.test(k) && !INPUT_ONLY.test(k));
-                return speaker || route;
+                const call = keys.some(k => callModeRule(k, AUDIO_CONTEXT.test(k)));
+                return speaker || route || call;
             }) || [];
         } catch (e) {
             logger.warn("JS module scan failed", e);
         }
         found.forEach((mod, i) => {
-            const hint = Object.keys(mod).find(k => SPEAKER_SETTER.test(k) || ROUTE_SETTER.test(k));
+            const hint = Object.keys(mod).find(k => callModeRule(k, true) || SPEAKER_SETTER.test(k) || ROUTE_SETTER.test(k));
             patchTarget(mod, `JS:${hint || i}`);
         });
     }
@@ -320,10 +388,14 @@
         if (!patchedTargets.length) lines.push("  (none found)");
         for (const p of patchedTargets) lines.push(`  ${p.label}: ${p.methods.join(", ")}`);
         lines.push("");
-        lines.push("Audio-like native modules:");
+        lines.push("Audio-like native modules and their functions:");
+        const seen = Object.keys(nativeSeen);
+        if (!seen.length) lines.push("  (none found)");
+        for (const name of seen) lines.push(`  ${name}: ${nativeSeen[name].join(", ") || "(no functions listed)"}`);
+        lines.push("");
+        lines.push("All native module names:");
         try {
-            const names = Object.keys(RN.NativeModules || {}).filter(n => MODULE_NAME.test(n));
-            lines.push("  " + (names.join(", ") || "(none enumerable)"));
+            lines.push("  " + (Object.keys(RN.NativeModules || {}).join(", ") || "(none enumerable)"));
         } catch {
             lines.push("  (not enumerable)");
         }
@@ -348,6 +420,13 @@
         });
 
         return h(ScrollView, { style: { flex: 1 } },
+            h(FormSection, { title: "Call mode" },
+                toggle("blockCallMode", "Block call mode", "Stop Discord from switching the phone into call (communication) mode"),
+                h(FormDivider),
+                toggle("blockSco", "Block Bluetooth call audio", "Keep the earbuds in media mode (full quality); your mic stays on the phone"),
+                h(FormDivider),
+                toggle("blockTelecom", "Block system call integration", "Stop Discord from registering the voice chat as a phone call"),
+            ),
             h(FormSection, { title: "Routing" },
                 toggle("blockSpeaker", "Block forced speaker", "Stop Discord from switching the phone speaker on while call audio is off"),
                 h(FormDivider),
@@ -374,7 +453,7 @@
             h(FormSection, { title: "Diagnostics" },
                 toggle("watchFlux", "Log audio events", "Record Discord's audio actions for troubleshooting"),
                 h(FormDivider),
-                toggle("toasts", "Show toasts", "Pop up a message whenever the plugin blocks a speaker switch"),
+                toggle("toasts", "Show toasts", "Pop up a message whenever the plugin blocks something"),
                 h(FormDivider),
                 h(FormRow, {
                     label: "Copy diagnostics",

@@ -1,8 +1,8 @@
 {
     "name": "BluetoothAudioFix",
-    "description": "Keeps Discord's audio on your Bluetooth earbuds when call audio is turned off, instead of letting it force the phone speaker.",
+    "description": "Stops Discord from putting your phone into call mode and keeps its audio on your Bluetooth earbuds at full quality.",
     "authors": [{ "name": "mangotcdragon" }],
     "main": "index.js",
-    "hash": "c8257f97664b9716fab78c7447758e72ef62ab2106302ed6c8f64f024bd2fd57",
+    "hash": "99a4653cd932790b4024d92c766e00dedeff663f7cc1d22409e1bdc4ad2294af",
     "vendetta": { "icon": "ic_headset" }
 }
