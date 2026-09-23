@@ -67,6 +67,9 @@
         "AudioDevices", "OutputDevices", "AudioRoutes", "Devices", "Routes", "CallAudioEnabled", "UseCallAudio"];
     const PROBE_METHODS = [];
     for (const pre of METHOD_PREFIXES) for (const obj of METHOD_OBJECTS) PROBE_METHODS.push(pre + obj);
+    // Real names from NativeAudioManagerModule and NativeTelecomModule.
+    PROBE_METHODS.push("setSCORetryCount", "setActiveAudioDevice", "getActiveAudioDevice", "isAvailable",
+        "startCall", "setCallActive", "endCall", "reportIncomingCall", "registerIncomingCall");
 
     // Discord source files worth scanning, by path.
     const AUDIO_PATH = /audio|voice|speaker|bluetooth|telecom|mediaengine|media_engine|rtc|incall|callkit|connectionservice|\bsco\b|headset/i;
@@ -156,18 +159,62 @@
         }
     }
 
-    function safePatch(kind, method, target, cb) {
+    // Which methods of which objects this plugin has patched. Kept outside the functions
+    // themselves so nothing sticks to Discord's code after the plugin unloads.
+    const patched = new Map();
+    const patchFailures = [];
+
+    // Replaces target[method] with a wrapper and checks that the replacement actually took.
+    // kind: "instead" cb(args, orig), "before" cb(args), "after" cb(args, ret).
+    function safePatch(kind, method, target, cb, label = currentLabel) {
+        let methods = patched.get(target);
+        if (methods && methods.has(method)) return false;
+        let orig;
+        try { orig = target[method]; } catch { return false; }
+        if (typeof orig !== "function") return false;
+
+        const wrapper = function (...args) {
+            if (kind === "before") {
+                try { cb.call(this, args); } catch (e) { record("error", `${label}.${method}`, String(e && e.message || e)); }
+                return orig.apply(this, args);
+            }
+            if (kind === "after") {
+                const ret = orig.apply(this, args);
+                try {
+                    const next = cb.call(this, args, ret);
+                    return next === undefined ? ret : next;
+                } catch (e) {
+                    record("error", `${label}.${method}`, String(e && e.message || e));
+                    return ret;
+                }
+            }
+            return cb.call(this, args, (...a) => orig.apply(this, a));
+        };
+
+        let error = "";
         try {
-            const fn = target[method];
-            if (typeof fn !== "function" || fn.__btfixPatched) return false;
-            const un = patcher[kind](method, target, cb);
-            try { target[method].__btfixPatched = true; } catch {}
-            unpatches.push(un);
-            return true;
+            if (!Reflect.defineProperty(target, method, { value: wrapper, writable: true, configurable: true })) target[method] = wrapper;
         } catch (e) {
-            logger.warn(`Could not patch ${method}`, e);
+            error = String(e && e.message || e);
+            try { target[method] = wrapper; } catch {}
+        }
+        let applied = false;
+        try { applied = target[method] === wrapper; } catch {}
+        if (!applied) {
+            patchFailures.push(`${label}.${method}: ${error || "replacement was ignored"}`);
             return false;
         }
+
+        if (!methods) patched.set(target, methods = new Set());
+        methods.add(method);
+        unpatches.push(() => {
+            try {
+                if (!Reflect.defineProperty(target, method, { value: orig, writable: true, configurable: true })) target[method] = orig;
+            } catch {}
+            const set = patched.get(target);
+            if (set) set.delete(method);
+        });
+        return true;
     }
 
     // Returns the arguments that keep the phone out of call mode, or null to skip the call entirely.
@@ -215,7 +262,74 @@
         return keys;
     }
 
+    let currentLabel = "?";
+
+    // Behaviour for Discord functions seen in real diagnostics (Android, 2026):
+    // NativeAudioManagerModule { getAudioDevices, getActiveAudioDevice, setSCORetryCount,
+    //   setCommunicationModeOn, setActiveAudioDevice } and NativeTelecomModule { isAvailable,
+    //   startCall, setCallActive, endCall, ... }.
+    function knownRule(key, label) {
+        const where = `${label}.${key}`;
+        const telecom = /telecom/i.test(label);
+        if (key === "setCommunicationModeOn") {
+            return { kind: "instead", cb(args, orig) {
+                record("call", where, describe(args[0]));
+                if (store.blockCallMode && args[0] !== false) {
+                    record("block", where, "call mode -> off");
+                    notify("Blocked call mode");
+                    return orig(false, ...args.slice(1));
+                }
+                return orig(...args);
+            } };
+        }
+        if (key === "setSCORetryCount") {
+            return { kind: "instead", cb(args, orig) {
+                record("call", where, describe(args[0]));
+                if (store.blockSco) return orig(0, ...args.slice(1));
+                return orig(...args);
+            } };
+        }
+        if (key === "setActiveAudioDevice") {
+            return { kind: "instead", cb(args, orig) {
+                record("call", where, describe(args[0]));
+                // Selecting the speaker turns speakerphone on for the whole phone, and selecting the
+                // earbuds as a call device starts SCO (call quality). With call mode off, Android
+                // already sends media to the earbuds, so skip both.
+                if (isSpeaker(args[0]) && shouldBlockSpeaker()) {
+                    record("block", where, "speaker skipped");
+                    notify("Blocked switch to speaker");
+                    return Promise.resolve();
+                }
+                if (isBluetooth(args[0]) && store.blockSco) {
+                    record("block", where, "Bluetooth call route skipped (keeps media quality)");
+                    return Promise.resolve();
+                }
+                return orig(...args);
+            } };
+        }
+        if (telecom && key === "isAvailable") {
+            return { kind: "after", cb(args, ret) {
+                if (!store.blockTelecom) return ret;
+                record("block", where, "reported unavailable");
+                return ret && typeof ret.then === "function" ? ret.then(() => false) : false;
+            } };
+        }
+        if (telecom && (key === "startCall" || key === "setCallActive")) {
+            return { kind: "instead", cb(args, orig) {
+                record("call", where, args.map(a => describe(a)).join(", "));
+                if (store.blockTelecom) {
+                    record("block", where, "system call skipped");
+                    notify("Blocked system call");
+                    return Promise.resolve();
+                }
+                return orig(...args);
+            } };
+        }
+        return null;
+    }
+
     function patchTarget(target, label) {
+        currentLabel = label;
         if (!target || (typeof target !== "object" && typeof target !== "function")) return;
         if (patchedTargets.some(p => p.target === target)) return;
 
@@ -229,6 +343,12 @@
             let fn;
             try { fn = target[key]; } catch { continue; }
             if (typeof fn !== "function") continue;
+
+            const known = knownRule(key, label);
+            if (known) {
+                if (safePatch(known.kind, key, target, known.cb)) methods.push(key);
+                continue;
+            }
 
             const rule = callModeRule(key, hasAudioContext);
             if (rule) {
@@ -266,7 +386,7 @@
                     record("call", `${label}.${key}`, args.map(a => describe(a)).join(", "));
                     const idx = args.findIndex(isSpeaker);
                     if (store.rerouteDevice && idx !== -1 && shouldBlockSpeaker()) {
-                        if (bluetoothKnown()) {
+                        if (bluetoothKnown() && !store.blockSco) {
                             const next = args.slice();
                             const bt = bluetoothDevice;
                             // Keep the argument's shape: pass an id string if the caller used one.
@@ -277,7 +397,7 @@
                             notify("Kept audio on Bluetooth");
                             return orig.apply(this, next);
                         }
-                        if (!store.onlyWhenBluetooth) {
+                        if (!store.onlyWhenBluetooth || bluetoothKnown()) {
                             record("block", `${label}.${key}`, "speaker route dropped");
                             notify("Blocked switch to speaker");
                             return Promise.resolve();
@@ -412,7 +532,7 @@
         } catch {}
         for (const registry of registries) {
             for (const method of ["get", "getEnforcing"]) {
-                safePatch("after", method, registry, (args, ret) => {
+                safePatch("after", method, registry, function (args, ret) {
                     const name = args[0];
                     if (typeof name !== "string") return ret;
                     turboRequested.add(name);
@@ -421,7 +541,7 @@
                         patchTarget(ret, `Native:${name}`);
                     }
                     return ret;
-                });
+                }, "TurboModuleRegistry");
             }
         }
     }
@@ -455,7 +575,8 @@
 
     function watchFlux() {
         if (!FluxDispatcher || typeof FluxDispatcher.dispatch !== "function") return;
-        safePatch("before", "dispatch", FluxDispatcher, args => {
+        // Kettu's patcher knows how to patch its lazily loaded common modules, so use it here.
+        const un = patcher.before("dispatch", FluxDispatcher, args => {
             const action = args[0];
             if (!action || typeof action.type !== "string") return;
             fluxTypes[action.type] = (fluxTypes[action.type] || 0) + 1;
@@ -471,6 +592,7 @@
                 }
             }
         });
+        unpatches.push(un);
     }
 
     let scanTimer = null;
@@ -514,15 +636,23 @@
 
     function diagnostics() {
         const lines = [];
-        lines.push("BluetoothAudioFix diagnostics v3");
+        lines.push("BluetoothAudioFix diagnostics v4");
         lines.push(`File paths available: ${Object.values(metro.modules || {}).some(m => m && m.__filePath)}`);
         lines.push(`Platform: ${RN.Platform.OS} ${RN.Platform.Version}`);
         lines.push(`Settings: ${JSON.stringify({ ...store })}`);
-        lines.push(`Bluetooth device: ${bluetoothKnown() ? describe(bluetoothDevice) : "none detected"}`);
         lines.push("");
         lines.push("Patched targets:");
         if (!patchedTargets.length) lines.push("  (none found)");
         for (const p of patchedTargets) lines.push(`  ${p.label}: ${p.methods.join(", ")}`);
+        lines.push("");
+        lines.push("Patch failures:");
+        lines.push("  " + (patchFailures.slice(-20).join("\n  ") || "(none)"));
+        lines.push("");
+        lines.push("Recent events:");
+        if (!log.length) lines.push("  (none yet - join a voice channel first)");
+        for (const e of log.slice(-40)) lines.push(`  ${e.t} [${e.kind}] ${e.where} ${e.detail || ""}`);
+        lines.push("");
+        lines.push(`Bluetooth device: ${bluetoothKnown() ? describe(bluetoothDevice) : "none detected"}`);
         lines.push("");
         lines.push("Audio-like native modules and their functions:");
         const seen = Object.keys(nativeSeen);
@@ -532,14 +662,14 @@
         lines.push("Native modules Discord requested:");
         lines.push("  " + ([...turboRequested].join(", ") || "(none yet)"));
         lines.push("");
-        lines.push("Audio/voice source files:");
-        const files = Object.keys(filesSeen);
-        if (!files.length) lines.push("  (none found - file paths unavailable?)");
-        for (const f of files) lines.push(`  ${f}: ${filesSeen[f]}`);
-        lines.push("");
         lines.push("Flux action types seen (voice/call/audio related):");
         const types = Object.keys(fluxTypes).filter(t => /VOICE|RTC|CALL|AUDIO|MEDIA|SPEAKER|BLUETOOTH|DEVICE/.test(t));
         lines.push("  " + (types.map(t => `${t}x${fluxTypes[t]}`).join(", ") || "(none yet)"));
+        lines.push("");
+        lines.push("Audio/voice source files:");
+        const files = Object.keys(filesSeen);
+        if (!files.length) lines.push("  (none found - file paths unavailable?)");
+        for (const f of files) lines.push(`  ${f}: ${String(filesSeen[f]).slice(0, 400)}`);
         lines.push("");
         lines.push("All native module names:");
         try {
@@ -547,9 +677,6 @@
         } catch {
             lines.push("  (not enumerable)");
         }
-        lines.push("");
-        lines.push("Recent events:");
-        for (const e of log) lines.push(`  ${e.t} [${e.kind}] ${e.where} ${e.detail || ""}`);
         return lines.join("\n");
     }
 
