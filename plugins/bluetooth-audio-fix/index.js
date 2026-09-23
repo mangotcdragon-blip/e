@@ -33,28 +33,55 @@
     // system phone call integration (Telecom). Any of these pulls the phone into a call.
     const ACTIVATE = /^(set|enable|start|enter|use|request|force|begin|activate|update|connect|report|register|add|place|show|display|create)/i;
     const DEACTIVATE = /^(stop|disable|exit|leave|end|clear|release|reset|disconnect|unregister|remove|hide)/i;
-    const CALL_MODE = /communicationmode|callmode|callaudio|incall|in_call|voicecall|voipmode|audiomode/i;
+    const CALL_MODE = /communicationmode|callmode|callaudio|incallmode|in_call_mode|incallaudio|voipmode|audiomode/i;
     const BARE_MODE = /^set(audio)?mode$/i;
     const COMM_DEVICE = /^set\w*communicationdevice/i;
     const SCO = /bluetoothsco|scoaudio|^startsco|^setsco|scoon$/i;
     const TELECOM = /telecom|connectionservice|phoneaccount|callkit|callkeep|callstyle|ongoingcall|selfmanaged|systemcall|nativecall/i;
 
-    const CANDIDATE_NATIVE_NAMES = [
-        "DCDAudioManager", "RTNAudioManager", "AudioManager", "AudioManagerModule",
-        "DiscordAudioManager", "NativeAudioManager", "AndroidAudioManager", "AudioRouteManager",
-        "DCDAudioRouteManager", "MediaEngine", "DCDMediaEngine", "MediaEngineModule",
-        "NativeMediaEngine", "VoiceEngine", "DiscordVoice", "DCDVoiceEngine", "NativeVoiceModule",
-        "InCallManager", "DCDInCallManager", "RTNAudioSession", "AudioSession", "DCDAudioSession",
-        "CallManager", "DCDCallManager", "RTNCallManager", "DCDVoiceModule", "VoiceConnection",
-        "DCDTelecom", "TelecomModule", "DCDTelecomManager", "CallConnectionService",
-        "DCDConnectionService", "RNCallKeep", "DCDCallKeep", "AudioFocus", "DCDAudioFocus",
-        "BluetoothManager", "DCDBluetoothManager", "BluetoothHeadsetModule",
+    // Discord's native modules follow three naming styles (Native<X>Module, RTN<X>Manager,
+    // DCD<X>Manager). Newer Discord builds hide the module list, so probe likely names.
+    const NATIVE_STEMS = [
+        "Audio", "AudioManager", "AudioSession", "AudioRoute", "AudioDevice", "AudioOutput",
+        "AudioFocus", "AudioMode", "Voice", "VoiceEngine", "VoiceConnection", "VoiceManager",
+        "MediaEngine", "Media", "Call", "InCall", "CallManager", "CallService", "Telecom",
+        "ConnectionService", "Bluetooth", "Sound", "SoundManager", "Speaker", "Rtc", "RTC",
+        "WebRTC", "DiscordVoice", "Headset", "Communication",
     ];
+    const CANDIDATE_NATIVE_NAMES = [];
+    for (const stem of NATIVE_STEMS) {
+        for (const name of [`Native${stem}Module`, `Native${stem}`, `RTN${stem}Manager`, `RTN${stem}`,
+            `DCD${stem}Manager`, `DCD${stem}`, `${stem}Manager`, `${stem}Module`, stem]) {
+            if (!CANDIDATE_NATIVE_NAMES.includes(name)) CANDIDATE_NATIVE_NAMES.push(name);
+        }
+    }
+    CANDIDATE_NATIVE_NAMES.push("InCallManager", "RNCallKeep", "AndroidAudioManager", "DiscordAudioManager");
+
+    // Native module functions can't be listed on newer Discord builds, so probe likely method names too.
+    const METHOD_PREFIXES = ["set", "enable", "disable", "start", "stop", "force", "use", "select", "switch",
+        "request", "toggle", "update", "enter", "exit", "report", "register", "end", "get", "is"];
+    const METHOD_OBJECTS = ["SpeakerphoneOn", "Speakerphone", "SpeakerOn", "Speaker", "CommunicationModeOn",
+        "CommunicationMode", "CallMode", "InCallMode", "AudioMode", "Mode", "BluetoothScoOn", "BluetoothSco",
+        "Sco", "CommunicationDevice", "AudioDevice", "AudioOutputDevice", "OutputDevice", "AudioRoute", "Route",
+        "Telecom", "TelecomCall", "ConnectionService", "VoiceCall", "CallAudio", "AudioSession", "AudioFocus",
+        "AudioDevices", "OutputDevices", "AudioRoutes", "Devices", "Routes", "CallAudioEnabled", "UseCallAudio"];
+    const PROBE_METHODS = [];
+    for (const pre of METHOD_PREFIXES) for (const obj of METHOD_OBJECTS) PROBE_METHODS.push(pre + obj);
+
+    // Discord source files worth scanning, by path.
+    const AUDIO_PATH = /audio|voice|speaker|bluetooth|telecom|mediaengine|media_engine|rtc|incall|callkit|connectionservice|\bsco\b|headset/i;
+    const SKIP_PATH = /\.(png|jpe?g|svg|json|lottie)$|assets\/|images\/|i18n|intl|locale|messages\//i;
 
     const unpatches = [];
     const patchedTargets = [];
     // Every audio-like native module that was found, with all of its functions, for diagnostics.
     const nativeSeen = {};
+    // Discord source files that matched AUDIO_PATH, with their exported names, for diagnostics.
+    const filesSeen = {};
+    // Native module names Discord requested after the plugin loaded.
+    const turboRequested = new Set();
+    // Every Flux action type seen, with a count.
+    const fluxTypes = {};
     const log = [];
     const MAX_LOG = 80;
 
@@ -144,8 +171,8 @@
     }
 
     // Returns the arguments that keep the phone out of call mode, or null to skip the call entirely.
-    function callModeArgs(args) {
-        if (args.length === 0) return null;
+    function callModeArgs(args, key) {
+        if (args.length === 0) return /mode|sco|communication|callaudio|telecom|connectionservice/i.test(key) ? null : args;
         const first = args[0];
         const next = args.slice();
         if (first === true) next[0] = false;
@@ -166,18 +193,34 @@
         return null;
     }
 
+    // Own, inherited (class methods) and probed function names of an object.
+    function keysOf(target) {
+        const keys = [];
+        const add = k => { if (typeof k === "string" && k !== "constructor" && !keys.includes(k)) keys.push(k); };
+        try {
+            for (const k in target) add(k);
+            let obj = target;
+            for (let depth = 0; obj && depth < 5; depth++) {
+                if (obj === Object.prototype || obj === Function.prototype) break;
+                for (const k of Object.getOwnPropertyNames(obj)) add(k);
+                obj = Object.getPrototypeOf(obj);
+            }
+        } catch {
+            if (!keys.length) return null;
+        }
+        for (const k of PROBE_METHODS) {
+            if (keys.includes(k)) continue;
+            try { if (typeof target[k] === "function") keys.push(k); } catch {}
+        }
+        return keys;
+    }
+
     function patchTarget(target, label) {
         if (!target || (typeof target !== "object" && typeof target !== "function")) return;
         if (patchedTargets.some(p => p.target === target)) return;
 
-        let keys;
-        try {
-            keys = [];
-            for (const k in target) keys.push(k);
-            for (const k of Object.getOwnPropertyNames(target)) if (!keys.includes(k)) keys.push(k);
-        } catch {
-            return;
-        }
+        const keys = keysOf(target);
+        if (!keys) return;
 
         const hasAudioContext = AUDIO_CONTEXT.test(label) || keys.some(k => AUDIO_CONTEXT.test(k));
         const methods = [];
@@ -192,7 +235,7 @@
                 const ok = safePatch("instead", key, target, function (args, orig) {
                     record("call", `${label}.${key}`, args.map(a => describe(a)).join(", "));
                     if (!store[rule.setting]) return orig.apply(this, args);
-                    const next = rule.drop && args[0] !== false ? null : callModeArgs(args);
+                    const next = rule.drop && args[0] !== false ? null : callModeArgs(args, key);
                     if (next === null) {
                         record("block", `${label}.${key}`, `${rule.what} skipped`);
                         notify(`Blocked ${rule.what}`);
@@ -296,14 +339,90 @@
         for (const name of names) {
             const mod = getNativeModule(name);
             if (!mod) continue;
-            try {
-                const fns = [];
-                for (const k in mod) if (typeof mod[k] === "function") fns.push(k);
-                nativeSeen[name] = fns;
-            } catch {
-                nativeSeen[name] = ["(could not list)"];
-            }
+            const keys = keysOf(mod) || [];
+            nativeSeen[name] = keys.filter(k => { try { return typeof mod[k] === "function"; } catch { return false; } });
             patchTarget(mod, `Native:${name}`);
+        }
+    }
+
+    function functionNames(obj) {
+        return (keysOf(obj) || []).filter(k => { try { return typeof obj[k] === "function"; } catch { return false; } });
+    }
+
+    // Scan Discord's own source files whose path mentions audio/voice/calls.
+    function scanFilePaths(deep) {
+        const modules = metro.modules || globalThis.modules;
+        if (!modules) return;
+        for (const id in modules) {
+            const mod = modules[id];
+            const path = mod && mod.__filePath;
+            if (!path || SKIP_PATH.test(path) || !AUDIO_PATH.test(path)) continue;
+            let exports;
+            if (mod.isInitialized) exports = mod.publicModule && mod.publicModule.exports;
+            else if (deep) {
+                try { exports = globalThis.__r(Number(id)); } catch (e) { filesSeen[path] = `(failed to load: ${e && e.message})`; continue; }
+            } else {
+                if (!filesSeen[path]) filesSeen[path] = "(not loaded yet)";
+                continue;
+            }
+            if (!exports || (typeof exports !== "object" && typeof exports !== "function")) continue;
+
+            const short = path.split("/").slice(-2).join("/");
+            const summary = [];
+            const visit = (obj, name) => {
+                if (!obj || (typeof obj !== "object" && typeof obj !== "function")) return;
+                let fns = functionNames(obj);
+                if (typeof obj === "function" && obj.prototype) {
+                    const protoFns = functionNames(obj.prototype);
+                    if (protoFns.length) {
+                        summary.push(`${name}.prototype{${protoFns.join(",")}}`);
+                        patchTarget(obj.prototype, `File:${short}:${name}.prototype`);
+                    }
+                }
+                if (fns.length) summary.push(`${name}{${fns.slice(0, 40).join(",")}}`);
+                patchTarget(obj, `File:${short}:${name}`);
+                // Stores hand out the media engine object that talks to the native voice code.
+                if (typeof obj.getMediaEngine === "function") {
+                    try {
+                        const engine = obj.getMediaEngine();
+                        if (engine) {
+                            summary.push(`getMediaEngine(){${functionNames(engine).join(",")}}`);
+                            patchTarget(engine, `MediaEngine`);
+                        }
+                    } catch {}
+                }
+            };
+            visit(exports, "exports");
+            for (const key of Object.keys(exports)) {
+                let value;
+                try { value = exports[key]; } catch { continue; }
+                if (value !== exports) visit(value, key);
+            }
+            filesSeen[path] = summary.join(" ") || "(no functions)";
+        }
+    }
+
+    // Log (and patch) native modules Discord asks for from now on.
+    function hookTurboModuleRegistry() {
+        const registries = [];
+        try { if (RN.TurboModuleRegistry) registries.push(RN.TurboModuleRegistry); } catch {}
+        try {
+            const found = metro.findByProps("getEnforcing", "get");
+            if (found && !registries.includes(found)) registries.push(found);
+        } catch {}
+        for (const registry of registries) {
+            for (const method of ["get", "getEnforcing"]) {
+                safePatch("after", method, registry, (args, ret) => {
+                    const name = args[0];
+                    if (typeof name !== "string") return ret;
+                    turboRequested.add(name);
+                    if (ret && MODULE_NAME.test(name)) {
+                        nativeSeen[name] = functionNames(ret);
+                        patchTarget(ret, `Native:${name}`);
+                    }
+                    return ret;
+                });
+            }
         }
     }
 
@@ -313,8 +432,13 @@
             found = metro.findAll(exp => {
                 if (!exp || (typeof exp !== "object" && typeof exp !== "function")) return false;
                 let keys;
-                try { keys = Object.keys(exp); } catch { return false; }
-                if (keys.length === 0 || keys.length > 200) return false;
+                try {
+                    keys = Object.keys(exp);
+                    if (keys.length > 200) return false;
+                    const proto = Object.getPrototypeOf(exp);
+                    if (proto && proto !== Object.prototype && proto !== Function.prototype) keys = keys.concat(Object.getOwnPropertyNames(proto));
+                } catch { return false; }
+                if (keys.length === 0) return false;
                 const speaker = keys.some(k => SPEAKER_SETTER.test(k) && !INPUT_ONLY.test(k));
                 const route = keys.some(k => ROUTE_SETTER.test(k) && AUDIO_CONTEXT.test(k) && !INPUT_ONLY.test(k));
                 const call = keys.some(k => callModeRule(k, AUDIO_CONTEXT.test(k)));
@@ -324,7 +448,7 @@
             logger.warn("JS module scan failed", e);
         }
         found.forEach((mod, i) => {
-            const hint = Object.keys(mod).find(k => callModeRule(k, true) || SPEAKER_SETTER.test(k) || ROUTE_SETTER.test(k));
+            const hint = (keysOf(mod) || []).find(k => callModeRule(k, true) || SPEAKER_SETTER.test(k) || ROUTE_SETTER.test(k));
             patchTarget(mod, `JS:${hint || i}`);
         });
     }
@@ -333,7 +457,11 @@
         if (!FluxDispatcher || typeof FluxDispatcher.dispatch !== "function") return;
         safePatch("before", "dispatch", FluxDispatcher, args => {
             const action = args[0];
-            if (!store.watchFlux || !action || typeof action.type !== "string" || !FLUX_AUDIO.test(action.type)) return;
+            if (!action || typeof action.type !== "string") return;
+            fluxTypes[action.type] = (fluxTypes[action.type] || 0) + 1;
+            // Voice code may load only when a call starts, so scan again then.
+            if (/^(VOICE_CHANNEL_SELECT|RTC_CONNECTION_STATE|CALL_CREATE|CALL_CONNECT)$/.test(action.type)) scheduleScan();
+            if (!store.watchFlux || !FLUX_AUDIO.test(action.type)) return;
             const { type, ...payload } = action;
             record("flux", type, describe(payload));
             for (const key of Object.keys(payload)) {
@@ -345,8 +473,15 @@
         });
     }
 
-    function scan() {
+    let scanTimer = null;
+    function scheduleScan() {
+        if (scanTimer) return;
+        scanTimer = setTimeout(() => { scanTimer = null; scan(false); }, 1500);
+    }
+
+    function scan(deep) {
         scanNativeModules();
+        try { scanFilePaths(deep); } catch (e) { logger.warn("File scan failed", e); }
         scanJsModules();
     }
 
@@ -379,7 +514,8 @@
 
     function diagnostics() {
         const lines = [];
-        lines.push("BluetoothAudioFix diagnostics");
+        lines.push("BluetoothAudioFix diagnostics v3");
+        lines.push(`File paths available: ${Object.values(metro.modules || {}).some(m => m && m.__filePath)}`);
         lines.push(`Platform: ${RN.Platform.OS} ${RN.Platform.Version}`);
         lines.push(`Settings: ${JSON.stringify({ ...store })}`);
         lines.push(`Bluetooth device: ${bluetoothKnown() ? describe(bluetoothDevice) : "none detected"}`);
@@ -392,6 +528,18 @@
         const seen = Object.keys(nativeSeen);
         if (!seen.length) lines.push("  (none found)");
         for (const name of seen) lines.push(`  ${name}: ${nativeSeen[name].join(", ") || "(no functions listed)"}`);
+        lines.push("");
+        lines.push("Native modules Discord requested:");
+        lines.push("  " + ([...turboRequested].join(", ") || "(none yet)"));
+        lines.push("");
+        lines.push("Audio/voice source files:");
+        const files = Object.keys(filesSeen);
+        if (!files.length) lines.push("  (none found - file paths unavailable?)");
+        for (const f of files) lines.push(`  ${f}: ${filesSeen[f]}`);
+        lines.push("");
+        lines.push("Flux action types seen (voice/call/audio related):");
+        const types = Object.keys(fluxTypes).filter(t => /VOICE|RTC|CALL|AUDIO|MEDIA|SPEAKER|BLUETOOTH|DEVICE/.test(t));
+        lines.push("  " + (types.map(t => `${t}x${fluxTypes[t]}`).join(", ") || "(none yet)"));
         lines.push("");
         lines.push("All native module names:");
         try {
@@ -447,7 +595,13 @@
                 h(FormDivider),
                 h(FormRow, {
                     label: "Rescan audio modules",
-                    onPress: () => { scan(); force(); ui.toasts.showToast(`${patchedTargets.length} audio target(s) patched`); },
+                    onPress: () => { scan(false); force(); ui.toasts.showToast(`${patchedTargets.length} audio target(s) patched`); },
+                }),
+                h(FormDivider),
+                h(FormRow, {
+                    label: "Deep scan",
+                    subLabel: "Also load Discord's audio code that hasn't started yet. Try this if the normal scan finds nothing",
+                    onPress: () => { scan(true); force(); ui.toasts.showToast(`${patchedTargets.length} audio target(s) patched`); },
                 }),
             ),
             h(FormSection, { title: "Diagnostics" },
@@ -460,7 +614,7 @@
                     subLabel: "Paste this when reporting that the fix didn't work",
                     onPress: () => { clipboard.setString(diagnostics()); ui.toasts.showToast("Copied"); },
                 }),
-                h(Text, { selectable: true, style: { fontFamily: "monospace", fontSize: 11, padding: 12, color: "#999" } }, diagnostics()),
+                h(Text, { selectable: true, style: { fontFamily: "monospace", fontSize: 11, padding: 12, color: "#999" } }, diagnostics().slice(0, 6000)),
             ),
         );
     }
@@ -468,10 +622,11 @@
     return {
         onLoad() {
             watchFlux();
-            scan();
+            hookTurboModuleRegistry();
+            scan(false);
             // Some audio modules are only initialised once voice code runs; scan again shortly after.
-            const timer = setTimeout(scan, 8000);
-            unpatches.push(() => clearTimeout(timer));
+            const timer = setTimeout(() => scan(false), 8000);
+            unpatches.push(() => { clearTimeout(timer); if (scanTimer) clearTimeout(scanTimer); scanTimer = null; });
             logger.log(`Loaded, ${patchedTargets.length} audio target(s) patched`);
         },
         onUnload() {

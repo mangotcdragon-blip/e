@@ -35,13 +35,19 @@ The repository has to be public for Kettu to download the plugin.
 
 ## If it doesn't work
 
-Discord renames its internal audio functions between versions, so the plugin looks for
-them by name when it starts instead of using fixed names. If your Discord version uses
-names it doesn't recognise:
+Discord renames its internal audio functions between versions, and newer builds hide the
+list of native modules. So the plugin finds Discord's audio code in three ways:
+
+- by the source file path of each Discord module (Kettu records these)
+- by logging which native modules Discord asks for after the plugin loads
+- by probing likely module and function names
+
+If it still doesn't find the right code:
 
 1. Open the plugin settings and turn on "Log audio events".
-2. Join a voice channel with call audio off so the audio moves to the speaker.
-3. Tap "Copy diagnostics" and share the text. It shows which functions the plugin found
+2. Join a voice channel with call audio off so the problem happens.
+3. If "Patched targets" is still empty, tap "Deep scan".
+4. Tap "Copy diagnostics" and share the text. It shows which functions the plugin found
    (or that it found none), and every function on Discord's audio modules, so the name
    patterns can be updated.
 
