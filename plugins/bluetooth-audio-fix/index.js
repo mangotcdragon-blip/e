@@ -14,6 +14,7 @@
         rerouteDevice: true,
         watchFlux: true,
         toasts: false,
+        allowCallWhileSharing: true,
     };
     for (const key in defaults) if (store[key] === undefined) store[key] = defaults[key];
 
@@ -26,7 +27,7 @@
     const INPUT_ONLY = /input|mic(rophone)?|capture|record|video|camera/i;
     const SPEAKER_VALUE = /speaker|builtin_?speaker|loudspeaker/i;
     const BLUETOOTH_VALUE = /bluetooth|a2dp|\bbt\b|bt_|_bt|sco|ble_|headset|earbud|buds|airpods|hearing/i;
-    const FLUX_AUDIO = /AUDIO|SPEAKER|OUTPUT_DEVICE|MEDIA_ENGINE_SET|BLUETOOTH|VOICE_DEVICE/i;
+    const FLUX_AUDIO = /AUDIO|SPEAKER|OUTPUT_DEVICE|MEDIA_ENGINE_SET|BLUETOOTH|VOICE_DEVICE|^STREAM_(START|STOP)$/i;
     const MODULE_NAME = /audio|sound|voice|media|rtc|call|speaker|bluetooth|route|telecom|connection/i;
 
     // Call mode: Android's MODE_IN_COMMUNICATION, the Bluetooth call profile (SCO) and the
@@ -69,7 +70,8 @@
     for (const pre of METHOD_PREFIXES) for (const obj of METHOD_OBJECTS) PROBE_METHODS.push(pre + obj);
     // Real names from NativeAudioManagerModule and NativeTelecomModule.
     PROBE_METHODS.push("setSCORetryCount", "setActiveAudioDevice", "getActiveAudioDevice", "isAvailable",
-        "startCall", "setCallActive", "endCall", "reportIncomingCall", "registerIncomingCall");
+        "startCall", "setCallActive", "endCall", "reportIncomingCall", "registerIncomingCall",
+        "startBroadcast", "stopBroadcast", "stopBroadcastWithError", "createOwnStreamConnectionWithOptions");
 
     // Discord source files worth scanning, by path.
     const AUDIO_PATH = /audio|voice|speaker|bluetooth|telecom|mediaengine|media_engine|rtc|incall|callkit|connectionservice|\bsco\b|headset/i;
@@ -268,6 +270,34 @@
     // NativeAudioManagerModule { getAudioDevices, getActiveAudioDevice, setSCORetryCount,
     //   setCommunicationModeOn, setActiveAudioDevice } and NativeTelecomModule { isAvailable,
     //   startCall, setCallActive, endCall, ... }.
+    // Screen share audio needs Discord's system call: Android only lets an app capture audio in
+    // the background while it is in a call. So while sharing, let the held-back call through.
+    let sharing = false;
+    const heldCall = { startCall: null, setCallActive: null };
+
+    function telecomBlocked() {
+        return store.blockTelecom && !(sharing && store.allowCallWhileSharing);
+    }
+
+    function setSharing(on, where) {
+        if (on === sharing) return;
+        sharing = on;
+        record("share", where, on ? "screen share started" : "screen share stopped");
+        if (!on || !store.blockTelecom || !store.allowCallWhileSharing) return;
+        for (const key of ["startCall", "setCallActive"]) {
+            const held = heldCall[key];
+            if (!held) continue;
+            heldCall[key] = null;
+            try {
+                const ret = held.orig(...held.args);
+                if (ret && typeof ret.catch === "function") ret.catch(e => record("error", key, String(e && e.message || e)));
+                record("allow", key, "started for screen share");
+            } catch (e) {
+                record("error", key, String(e && e.message || e));
+            }
+        }
+    }
+
     function knownRule(key, label) {
         const where = `${label}.${key}`;
         const telecom = /telecom/i.test(label);
@@ -307,9 +337,21 @@
                 return orig(...args);
             } };
         }
+        if (key === "startBroadcast" || key === "createOwnStreamConnectionWithOptions") {
+            return { kind: "before", cb() { setSharing(true, where); } };
+        }
+        if (key === "stopBroadcast" || key === "stopBroadcastWithError") {
+            return { kind: "before", cb() { setSharing(false, where); } };
+        }
+        if (telecom && key === "endCall") {
+            return { kind: "before", cb() {
+                record("call", where, "");
+                heldCall.startCall = heldCall.setCallActive = null;
+            } };
+        }
         if (telecom && key === "isAvailable") {
             return { kind: "after", cb(args, ret) {
-                if (!store.blockTelecom) return ret;
+                if (!telecomBlocked()) return ret;
                 record("block", where, "reported unavailable");
                 return ret && typeof ret.then === "function" ? ret.then(() => false) : false;
             } };
@@ -317,8 +359,10 @@
         if (telecom && (key === "startCall" || key === "setCallActive")) {
             return { kind: "instead", cb(args, orig) {
                 record("call", where, args.map(a => describe(a)).join(", "));
-                if (store.blockTelecom) {
-                    record("block", where, "system call skipped");
+                if (telecomBlocked()) {
+                    // Keep the call so it can be started later if you share your screen.
+                    heldCall[key] = { args, orig };
+                    record("block", where, "system call held back");
                     notify("Blocked system call");
                     return Promise.resolve();
                 }
@@ -580,6 +624,8 @@
             const action = args[0];
             if (!action || typeof action.type !== "string") return;
             fluxTypes[action.type] = (fluxTypes[action.type] || 0) + 1;
+            if (action.type === "STREAM_START") setSharing(true, "flux:STREAM_START");
+            else if (action.type === "STREAM_STOP") setSharing(false, "flux:STREAM_STOP");
             // Voice code may load only when a call starts, so scan again then.
             if (/^(VOICE_CHANNEL_SELECT|RTC_CONNECTION_STATE|CALL_CREATE|CALL_CONNECT)$/.test(action.type)) scheduleScan();
             if (!store.watchFlux || !FLUX_AUDIO.test(action.type)) return;
@@ -636,10 +682,11 @@
 
     function diagnostics() {
         const lines = [];
-        lines.push("BluetoothAudioFix diagnostics v4");
+        lines.push("BluetoothAudioFix diagnostics v5");
         lines.push(`File paths available: ${Object.values(metro.modules || {}).some(m => m && m.__filePath)}`);
         lines.push(`Platform: ${RN.Platform.OS} ${RN.Platform.Version}`);
         lines.push(`Settings: ${JSON.stringify({ ...store })}`);
+        lines.push(`Screen sharing: ${sharing}, held system call: ${heldCall.startCall ? "yes" : "no"}`);
         lines.push("");
         lines.push("Patched targets:");
         if (!patchedTargets.length) lines.push("  (none found)");
@@ -663,7 +710,7 @@
         lines.push("  " + ([...turboRequested].join(", ") || "(none yet)"));
         lines.push("");
         lines.push("Flux action types seen (voice/call/audio related):");
-        const types = Object.keys(fluxTypes).filter(t => /VOICE|RTC|CALL|AUDIO|MEDIA|SPEAKER|BLUETOOTH|DEVICE/.test(t));
+        const types = Object.keys(fluxTypes).filter(t => /VOICE|RTC|CALL|AUDIO|MEDIA|SPEAKER|BLUETOOTH|DEVICE|STREAM/.test(t));
         lines.push("  " + (types.map(t => `${t}x${fluxTypes[t]}`).join(", ") || "(none yet)"));
         lines.push("");
         lines.push("Audio/voice source files:");
@@ -701,6 +748,8 @@
                 toggle("blockSco", "Block Bluetooth call audio", "Keep the earbuds in media mode (full quality); your mic stays on the phone"),
                 h(FormDivider),
                 toggle("blockTelecom", "Block system call integration", "Stop Discord from registering the voice chat as a phone call"),
+                h(FormDivider),
+                toggle("allowCallWhileSharing", "Allow it while screen sharing", "Screen share audio needs the system call, so it starts when you share (the call bar appears until you leave the channel)"),
             ),
             h(FormSection, { title: "Routing" },
                 toggle("blockSpeaker", "Block forced speaker", "Stop Discord from switching the phone speaker on while call audio is off"),

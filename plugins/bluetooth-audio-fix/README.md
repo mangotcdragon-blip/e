@@ -14,6 +14,9 @@ speaker, even though your Bluetooth earbuds are still connected.
   - **Bluetooth call audio (SCO):** the earbuds stay on the media profile, so audio keeps full
     quality and your mic stays on the phone.
   - **System call integration:** Discord can't register voice chat as a phone call.
+    Screen share audio needs this call: Android only lets an app capture audio in the
+    background while it is in a call. So when you start sharing your screen, the plugin lets
+    the held-back call through ("Allow it while screen sharing", on by default).
 - Blocks Discord's calls that force the speakerphone on. With call audio off, Android
   then plays audio on the connected Bluetooth device again.
 - If Discord selects the speaker as its output device, the plugin selects your Bluetooth
