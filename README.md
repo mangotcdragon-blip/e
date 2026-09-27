@@ -1,22 +1,32 @@
 # Puzzle Vault
 
-An Android puzzle game. Work through six puzzles, each of which unlocks one digit
-of a freshly generated 6-digit vault code. Punch the code into the vault's keypad,
-sit through the unlock sequence, and the vault plays its contents (the OIIA
-spinning cat video).
+An Android puzzle game. The 6-digit vault code is split into six chapters: each
+digit only unlocks after solving 3 puzzles, and the puzzles get harder with every
+digit (18 puzzles per run). Punch the finished code into the vault's keypad, sit
+through the unlock sequence, and the vault plays its contents (the OIIA spinning
+cat video).
+
+Progress is saved after every puzzle, so a run can be continued from the main menu.
 
 ## Puzzles
 
-The six stages come in a random order, and their contents are randomised every run:
+Each chapter draws 3 different puzzle types. Every puzzle is freshly generated per run:
 
-| Stage | What you do |
-| --- | --- |
-| Number Cruncher | Solve an arithmetic expression (order of operations matters) |
-| Pattern Hunter | Give the next number in a sequence |
-| Word Scramble | Unscramble a word (hints reveal letters) |
-| Echo Pads | Watch 6 coloured flashes and repeat them |
-| Lights Out | 4x4 board: turn every light off |
-| Secret Message | Decode a Caesar-shifted word |
+| Puzzle | What you do | Gets harder by |
+| --- | --- | --- |
+| Island of Liars | Knights always tell the truth, knaves always lie: work out who is who | More islanders, trickier statements (if/or) |
+| Beat the Machine | Nim: take stones from one row, whoever takes the last stone wins | More/bigger rows, machine stops making mistakes |
+| The Two Jugs | Measure an exact amount using two unmarked jugs | Longer shortest solution |
+| The Tower | Tower of Hanoi | 3 to 5 disks |
+| Slide Lock | Sliding tile puzzle | Deeper scramble, 4x4 board |
+| Number Grid | Mini sudoku with a unique solution | 4x4 to 6x6, fewer clues |
+| Colour Lock | Mastermind-style code breaking | More colours, repeats, fewer guesses |
+| Lights Out | Turn every light off | 4x4 to 5x5, more lights |
+| Intercepted Message | Crack a shift cipher from one known word | Two-word messages, reversed text |
+| Echo Pads | Repeat a sequence of flashes | Longer sequences |
+
+Wrong answers on guessable puzzles (liars, colour lock, Nim) reset them with a new
+puzzle, so they have to be solved rather than guessed.
 
 When the last puzzle is solved the full code is shown once. The vault (reachable from
 the main menu too) only accepts the code from your most recent completed run.

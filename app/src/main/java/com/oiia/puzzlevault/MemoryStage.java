@@ -13,25 +13,26 @@ import java.util.Random;
 
 /** Watch the pads flash, then repeat the sequence. */
 class MemoryStage extends Stage {
-    private static final int LENGTH = 6;
     private static final int[] COLORS = {0xFFFF5C7A, 0xFF3DDC97, 0xFF4DA3FF, 0xFFFFC857};
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final View[] pads = new View[4];
+    private final int length;
     private int[] sequence;
     private int pos;
     private boolean accepting;
     private TextView status;
     private Button play;
 
-    MemoryStage(Host host, Random rnd) {
-        super(host, rnd);
+    MemoryStage(Host host, Random rnd, int level) {
+        super(host, rnd, level);
+        length = 5 + level;
         newSequence();
     }
 
     private void newSequence() {
-        sequence = new int[LENGTH];
-        for (int i = 0; i < LENGTH; i++) sequence[i] = rnd.nextInt(4);
+        sequence = new int[length];
+        for (int i = 0; i < length; i++) sequence[i] = rnd.nextInt(4);
     }
 
     @Override
@@ -41,7 +42,7 @@ class MemoryStage extends Stage {
 
     @Override
     String instructions() {
-        return "Watch the " + LENGTH + " flashes, then tap the pads in the same order.";
+        return "Watch the " + length + " flashes, then tap the pads in the same order.";
     }
 
     @Override
@@ -87,7 +88,7 @@ class MemoryStage extends Stage {
             accepting = true;
             play.setEnabled(true);
             play.setText("Replay sequence");
-            status.setText("Your turn: 0 / " + LENGTH);
+            status.setText("Your turn: 0 / " + length);
         }, t);
     }
 
@@ -101,8 +102,8 @@ class MemoryStage extends Stage {
         flash(idx, 180);
         if (idx == sequence[pos]) {
             pos++;
-            status.setText("Your turn: " + pos + " / " + LENGTH);
-            if (pos == LENGTH) {
+            status.setText("Your turn: " + pos + " / " + length);
+            if (pos == length) {
                 accepting = false;
                 handler.postDelayed(this::solved, 300);
             }

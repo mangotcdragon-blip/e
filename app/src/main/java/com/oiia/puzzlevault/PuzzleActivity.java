@@ -2,6 +2,8 @@ package com.oiia.puzzlevault;
 
 import android.app.Activity;
 import android.content.Intent;
+import android.content.res.ColorStateList;
+import android.graphics.Typeface;
 import android.os.Bundle;
 import android.view.Gravity;
 import android.view.View;
@@ -14,45 +16,43 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 
 import java.security.SecureRandom;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-import java.util.Random;
 
 /**
- * Runs the player through every puzzle stage (in a shuffled order). Each solved stage
- * unlocks one digit of a freshly generated vault code; once all are solved the full code
- * is revealed and stored for the vault.
+ * Runs the player through the puzzle chapters. Every digit of the vault code needs
+ * {@link Plan#STEPS} puzzles solved; difficulty rises chapter by chapter. Progress is
+ * saved after every puzzle so the run can be continued later.
  */
 public class PuzzleActivity extends Activity implements Stage.Host {
-    private final Random rnd = new Random();
-    private final List<Stage> stages = new ArrayList<>();
+    static final String EXTRA_NEW_RUN = "new_run";
+
+    private long seed;
     private String code;
-    private int current = 0;
+    private int[] plan;
+    private int current;
     private Stage active;
 
     private TextView progressLabel;
     private TextView codeSlots;
     private ProgressBar progressBar;
     private FrameLayout body;
+    private ScrollView scroll;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        stages.add(new MathStage(this, rnd));
-        stages.add(new SequenceStage(this, rnd));
-        stages.add(new AnagramStage(this, rnd));
-        stages.add(new MemoryStage(this, rnd));
-        stages.add(new LightsOutStage(this, rnd));
-        stages.add(new CipherStage(this, rnd));
-        Collections.shuffle(stages, rnd);
-
-        SecureRandom sr = new SecureRandom();
-        StringBuilder sb = new StringBuilder();
-        sb.append(1 + sr.nextInt(9));
-        for (int i = 1; i < stages.size(); i++) sb.append(sr.nextInt(10));
-        code = sb.toString();
+        boolean fresh = getIntent().getBooleanExtra(EXTRA_NEW_RUN, false);
+        if (fresh && savedInstanceState == null || !CodeStore.hasRun(this)) {
+            SecureRandom sr = new SecureRandom();
+            StringBuilder sb = new StringBuilder();
+            sb.append(1 + sr.nextInt(9));
+            for (int i = 1; i < Plan.DIGITS; i++) sb.append(sr.nextInt(10));
+            CodeStore.startRun(this, sr.nextLong(), sb.toString());
+        }
+        seed = CodeStore.runSeed(this);
+        code = CodeStore.runCode(this);
+        current = CodeStore.runIndex(this);
+        plan = Plan.build(seed);
 
         LinearLayout root = Ui.column(this);
         root.setBackgroundColor(Ui.BG);
@@ -63,36 +63,43 @@ public class PuzzleActivity extends Activity implements Stage.Host {
         root.addView(progressLabel);
 
         progressBar = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
-        progressBar.setMax(stages.size());
-        progressBar.setProgressTintList(android.content.res.ColorStateList.valueOf(Ui.ACCENT));
+        progressBar.setMax(Plan.TOTAL);
+        progressBar.setProgressTintList(ColorStateList.valueOf(Ui.ACCENT));
         root.addView(progressBar, Ui.wide(this, 6));
 
         codeSlots = Ui.text(this, "", 30, Ui.GOOD, true);
-        codeSlots.setTypeface(android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD);
-        root.addView(codeSlots, Ui.wide(this, 14));
+        codeSlots.setTypeface(Typeface.MONOSPACE, Typeface.BOLD);
+        root.addView(codeSlots, Ui.wide(this, 10));
 
-        ScrollView scroll = new ScrollView(this);
+        scroll = new ScrollView(this);
         scroll.setFillViewport(true);
         body = new FrameLayout(this);
         scroll.addView(body);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f);
-        lp.topMargin = Ui.dp(this, 16);
+        lp.topMargin = Ui.dp(this, 12);
         root.addView(scroll, lp);
 
         setContentView(root);
         showStage();
     }
 
+    private int digitsUnlocked() {
+        return current / Plan.STEPS;
+    }
+
     private void updateHeader() {
-        progressLabel.setText(current < stages.size()
-                ? "Puzzle " + (current + 1) + " of " + stages.size()
-                : "All puzzles solved");
+        if (current < Plan.TOTAL) {
+            progressLabel.setText("Digit " + (digitsUnlocked() + 1) + " of " + Plan.DIGITS
+                    + "   ·   Step " + (current % Plan.STEPS + 1) + " of " + Plan.STEPS);
+        } else {
+            progressLabel.setText("All puzzles solved");
+        }
         progressBar.setProgress(current);
         StringBuilder sb = new StringBuilder();
         for (int i = 0; i < code.length(); i++) {
             if (i > 0) sb.append(' ');
-            sb.append(i < current ? code.charAt(i) : '_');
+            sb.append(i < digitsUnlocked() ? code.charAt(i) : '_');
         }
         codeSlots.setText(sb.toString());
     }
@@ -104,18 +111,22 @@ public class PuzzleActivity extends Activity implements Stage.Host {
                 FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT,
                 Gravity.CENTER);
         body.addView(v, lp);
+        scroll.scrollTo(0, 0);
         v.setAlpha(0f);
         v.animate().alpha(1f).setDuration(250).start();
     }
 
     private void showStage() {
         updateHeader();
-        active = stages.get(current);
+        if (current >= Plan.TOTAL) {
+            showFinished();
+            return;
+        }
+        active = Plan.create(plan[current], this, seed, current);
         LinearLayout col = Ui.column(this);
         col.addView(Ui.text(this, active.title(), 26, Ui.ACCENT, true));
         col.addView(Ui.text(this, active.instructions(), 15, Ui.MUTED, false), Ui.wide(this, 6));
-        LinearLayout.LayoutParams lp = Ui.wide(this, 24);
-        col.addView(active.build(this), lp);
+        col.addView(active.build(this), Ui.wide(this, 20));
         setBody(col);
     }
 
@@ -124,20 +135,32 @@ public class PuzzleActivity extends Activity implements Stage.Host {
         active.dispose();
         active = null;
         current++;
+        CodeStore.setRunIndex(this, current);
         updateHeader();
-        if (current >= stages.size()) {
+        if (current >= Plan.TOTAL) {
             showFinished();
             return;
         }
+
         LinearLayout col = Ui.column(this);
-        col.addView(Ui.text(this, "Solved!", 30, Ui.GOOD, true));
-        col.addView(Ui.text(this, "Digit " + current + " unlocked:", 16, Ui.MUTED, false),
-                Ui.wide(this, 16));
-        TextView digit = Ui.text(this, String.valueOf(code.charAt(current - 1)), 72, Ui.TEXT, true);
-        col.addView(digit, Ui.wide(this, 4));
-        digit.setScaleX(0.3f);
-        digit.setScaleY(0.3f);
-        digit.animate().scaleX(1f).scaleY(1f).setDuration(350).start();
+        if (current % Plan.STEPS != 0) {
+            col.addView(Ui.text(this, "Step complete", 30, Ui.GOOD, true));
+            int remaining = Plan.STEPS - current % Plan.STEPS;
+            col.addView(Ui.text(this, remaining + (remaining == 1 ? " more puzzle" : " more puzzles")
+                    + " until digit " + (digitsUnlocked() + 1) + " unlocks.", 16, Ui.MUTED, false),
+                    Ui.wide(this, 12));
+        } else {
+            col.addView(Ui.text(this, "Digit unlocked!", 30, Ui.GOOD, true));
+            col.addView(Ui.text(this, "Digit " + digitsUnlocked() + " of the code is:", 16, Ui.MUTED, false),
+                    Ui.wide(this, 16));
+            TextView digit = Ui.text(this, String.valueOf(code.charAt(digitsUnlocked() - 1)), 72, Ui.TEXT, true);
+            col.addView(digit, Ui.wide(this, 4));
+            digit.setScaleX(0.3f);
+            digit.setScaleY(0.3f);
+            digit.animate().scaleX(1f).scaleY(1f).setDuration(350).start();
+            col.addView(Ui.text(this, "The next puzzles get harder.", 14, Ui.MUTED, false),
+                    Ui.wide(this, 8));
+        }
         Button next = Ui.button(this, "Next puzzle", Ui.ACCENT);
         next.setOnClickListener(v -> showStage());
         col.addView(next, Ui.wide(this, 28));
@@ -151,7 +174,7 @@ public class PuzzleActivity extends Activity implements Stage.Host {
         col.addView(Ui.text(this, "Memorise it (or write it down). You'll need to punch it into the vault.",
                 15, Ui.MUTED, false), Ui.wide(this, 8));
         TextView big = Ui.text(this, code, 54, Ui.TEXT, true);
-        big.setTypeface(android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD);
+        big.setTypeface(Typeface.MONOSPACE, Typeface.BOLD);
         big.setLetterSpacing(0.15f);
         big.setBackground(Ui.rounded(this, Ui.CARD, 16));
         int p = Ui.dp(this, 18);

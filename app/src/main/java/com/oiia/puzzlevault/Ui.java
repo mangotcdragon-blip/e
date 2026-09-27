@@ -96,6 +96,45 @@ final class Ui {
         return lp;
     }
 
+    /** Size in px for one cell of a row of {@code n} cells that must fit the screen width. */
+    static int cell(Context c, int n, int maxDp, int gapDp) {
+        float density = c.getResources().getDisplayMetrics().density;
+        int screenDp = (int) (c.getResources().getDisplayMetrics().widthPixels / density);
+        int size = Math.min(maxDp, (screenDp - 48) / n - gapDp);
+        return dp(c, size);
+    }
+
+    static View circle(Context c, int color, boolean outlined) {
+        View v = new View(c);
+        GradientDrawable d = new GradientDrawable();
+        d.setShape(GradientDrawable.OVAL);
+        if (outlined) {
+            d.setColor(CARD);
+            d.setStroke(dp(c, 2), MUTED);
+        } else {
+            d.setColor(color);
+        }
+        v.setBackground(d);
+        return v;
+    }
+
+    static Button smallButton(Context c, String label, int color) {
+        Button b = button(c, label, color);
+        b.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
+        int p = dp(c, 8);
+        b.setPadding(p, p, p, p);
+        b.setMinHeight(0);
+        b.setMinimumHeight(0);
+        return b;
+    }
+
+    static LinearLayout row(Context c) {
+        LinearLayout l = new LinearLayout(c);
+        l.setOrientation(LinearLayout.HORIZONTAL);
+        l.setGravity(Gravity.CENTER);
+        return l;
+    }
+
     static void shake(View v) {
         v.animate().cancel();
         v.setTranslationX(0);

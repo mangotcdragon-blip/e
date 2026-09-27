@@ -6,7 +6,10 @@ import android.widget.Toast;
 
 import java.util.Random;
 
-/** One puzzle in the run. Each solved stage unlocks one digit of the vault code. */
+/**
+ * One puzzle in the run. Every digit of the vault code takes several stages to unlock.
+ * {@code level} (0 = first digit ... 5 = last digit) scales the difficulty.
+ */
 abstract class Stage {
     interface Host {
         void onStageSolved();
@@ -14,10 +17,12 @@ abstract class Stage {
 
     protected final Host host;
     protected final Random rnd;
+    protected final int level;
 
-    Stage(Host host, Random rnd) {
+    Stage(Host host, Random rnd, int level) {
         this.host = host;
         this.rnd = rnd;
+        this.level = level;
     }
 
     abstract String title();
@@ -35,15 +40,19 @@ abstract class Stage {
 
     protected void wrong(View v, String msg) {
         Ui.shake(v);
-        Toast.makeText(v.getContext(), msg, Toast.LENGTH_SHORT).show();
+        toast(v.getContext(), msg);
     }
 
-    /** Parses an int typed by the player, or returns null if it isn't a number. */
-    protected static Integer parse(CharSequence s) {
-        try {
-            return Integer.parseInt(s.toString().trim());
-        } catch (NumberFormatException e) {
-            return null;
+    protected static void toast(Context c, String msg) {
+        Toast.makeText(c, msg, Toast.LENGTH_SHORT).show();
+    }
+
+    protected void shuffle(int[] a) {
+        for (int i = a.length - 1; i > 0; i--) {
+            int j = rnd.nextInt(i + 1);
+            int t = a[i];
+            a[i] = a[j];
+            a[j] = t;
         }
     }
 }
