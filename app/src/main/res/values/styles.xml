@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="AppTheme" parent="android:Theme.Material.NoActionBar">
+        <item name="android:colorPrimary">#FF1B2330</item>
+        <item name="android:colorPrimaryDark">#FF0F1419</item>
+        <item name="android:colorAccent">#FF7C5CFF</item>
+        <item name="android:windowBackground">@android:color/black</item>
+        <item name="android:statusBarColor">#FF0F1419</item>
+        <item name="android:navigationBarColor">#FF0F1419</item>
+    </style>
+
+    <style name="AppTheme.Fullscreen">
+        <item name="android:windowFullscreen">true</item>
+        <item name="android:windowBackground">@android:color/black</item>
+    </style>
+</resources>
