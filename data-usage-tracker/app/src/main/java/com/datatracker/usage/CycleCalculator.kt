@@ -41,6 +41,21 @@ object CycleCalculator {
         return current to previous
     }
 
+    /**
+     * Given the start of some cycle, returns the start of the *next* one -- used to walk
+     * forward through cycle boundaries one at a time when compounding rollover across however
+     * many cycles have elapsed since it was last computed.
+     */
+    fun nextCycleStart(
+        cycleStart: ZonedDateTime,
+        resetDay: Int,
+        resetHour: Int,
+        resetMinute: Int
+    ): ZonedDateTime {
+        val nextMonth = YearMonth.from(cycleStart).plusMonths(1)
+        return resetInstantFor(nextMonth, resetDay, resetHour, resetMinute, cycleStart.zone)
+    }
+
     private fun resetInstantFor(
         yearMonth: YearMonth,
         day: Int,

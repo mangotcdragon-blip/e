@@ -29,10 +29,30 @@ class PrefsStore(context: Context) {
         get() = prefs.getBoolean(KEY_CONFIGURED, false)
         set(value) = prefs.edit().putBoolean(KEY_CONFIGURED, value).apply()
 
-    /** Set once, the first time the user ever saves settings -- see [RolloverPolicy]. */
+    /** Set once, the first time the user ever saves settings. Currently informational only. */
     var firstConfiguredAtMillis: Long
         get() = prefs.getLong(KEY_FIRST_CONFIGURED_AT, 0L)
         set(value) = prefs.edit().putLong(KEY_FIRST_CONFIGURED_AT, value).apply()
+
+    /** The running rollover balance carried into the current cycle. See [RolloverLedger]. */
+    var carriedRolloverBytes: Long
+        get() = prefs.getLong(KEY_CARRIED_ROLLOVER, 0L)
+        set(value) = prefs.edit().putLong(KEY_CARRIED_ROLLOVER, value).apply()
+
+    /** The start (epoch millis) of the most recent cycle the ledger has folded into
+     * [carriedRolloverBytes]. 0 means the ledger hasn't been bootstrapped yet. */
+    var lastProcessedCycleStartMillis: Long
+        get() = prefs.getLong(KEY_LAST_PROCESSED_CYCLE, 0L)
+        set(value) = prefs.edit().putLong(KEY_LAST_PROCESSED_CYCLE, value).apply()
+
+    /** Overwrites the ledger directly (e.g. the user syncing it to a balance their carrier
+     * reports) and anchors it to the given cycle start so future cycles compound from here. */
+    fun overrideCarriedRollover(newBalanceBytes: Long, asOfCycleStartMillis: Long) {
+        prefs.edit()
+            .putLong(KEY_CARRIED_ROLLOVER, newBalanceBytes.coerceAtLeast(0))
+            .putLong(KEY_LAST_PROCESSED_CYCLE, asOfCycleStartMillis)
+            .apply()
+    }
 
     companion object {
         private const val PREFS_NAME = "data_tracker_prefs"
@@ -43,6 +63,8 @@ class PrefsStore(context: Context) {
         private const val KEY_ROLLOVER = "rollover_enabled"
         private const val KEY_CONFIGURED = "is_configured"
         private const val KEY_FIRST_CONFIGURED_AT = "first_configured_at"
+        private const val KEY_CARRIED_ROLLOVER = "carried_rollover_bytes"
+        private const val KEY_LAST_PROCESSED_CYCLE = "last_processed_cycle_start"
         const val DEFAULT_ALLOWANCE_BYTES = 10L * 1024 * 1024 * 1024 // 10 GB
     }
 }

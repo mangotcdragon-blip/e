@@ -137,4 +137,33 @@ class SmokeTest {
         assertEquals(prefs.allowanceBytes, snapshot.totalBytes)
         assertFalse("usageDataAvailable should be false when access is missing", snapshot.usageDataAvailable)
     }
+
+    @Test
+    fun `manual rollover override persists and is not clobbered by the next snapshot`() {
+        val context = ApplicationProvider.getApplicationContext<android.app.Application>()
+        val repo = DataUsageRepository(context)
+        val prefs = PrefsStore(context)
+        prefs.allowanceBytes = ByteFormat.gbToBytes(1.25)
+        prefs.resetDay = 26
+        prefs.isConfigured = true
+
+        // First call bootstraps the ledger. No usage access in this test environment, so the
+        // bootstrapped rollover is 0 -- this is the gap the manual override exists to close.
+        val before = repo.currentSnapshot(prefs)
+        assertEquals(0L, before.rolloverBytes)
+        assertTrue(prefs.lastProcessedCycleStartMillis > 0L)
+
+        // User syncs their balance to what their carrier reports (e.g. 3.8 GB total = 1.25 GB
+        // allowance + 2.55 GB carried over from cycles this device can't reconstruct).
+        val overrideBytes = ByteFormat.gbToBytes(2.55)
+        prefs.overrideCarriedRollover(overrideBytes, prefs.lastProcessedCycleStartMillis)
+
+        val after = repo.currentSnapshot(prefs)
+        assertEquals(overrideBytes, after.rolloverBytes)
+        assertEquals(prefs.allowanceBytes + overrideBytes, after.totalBytes)
+
+        // A third call within the same cycle should leave the balance untouched.
+        val third = repo.currentSnapshot(prefs)
+        assertEquals(overrideBytes, third.rolloverBytes)
+    }
 }

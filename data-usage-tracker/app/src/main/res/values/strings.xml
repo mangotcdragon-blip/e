@@ -5,7 +5,8 @@
     <string name="remaining_of">%1$s left of %2$s</string>
     <string name="used_label">%1$s used this cycle</string>
     <string name="cycle_range">Cycle: %1$s – %2$s</string>
-    <string name="rollover_note">Includes %1$s rolled over (%2$s unused of %3$s last cycle, %4$s–%5$s)</string>
+    <string name="rollover_note">Includes %1$s rolled over from previous cycles (last cycle: %2$s used of %3$s, %4$s–%5$s)</string>
+    <string name="rollover_note_simple">Includes %1$s rolled over from previous cycles</string>
     <string name="data_unavailable_note">Couldn\'t read usage data for part of this cycle — numbers below may be incomplete</string>
 
     <string name="action_settings">Settings</string>
@@ -23,9 +24,12 @@
     <string name="label_reset_day">Reset day of month</string>
     <string name="label_reset_time">Reset time</string>
     <string name="label_rollover">Roll over unused data from last cycle</string>
+    <string name="label_rollover_balance">Current rollover balance (GB)</string>
+    <string name="rollover_balance_help">Auto-calculated, but you can set this to match what your carrier reports if they differ (e.g. multiple accumulated cycles this app couldn\'t reconstruct)</string>
 
     <string name="hint_allowance">e.g. 20</string>
     <string name="hint_reset_day">1–31</string>
+    <string name="hint_rollover_balance">e.g. 3.8</string>
 
     <string name="notification_channel_name">Data usage</string>
     <string name="notification_channel_desc">Shows remaining mobile data for the current billing cycle</string>

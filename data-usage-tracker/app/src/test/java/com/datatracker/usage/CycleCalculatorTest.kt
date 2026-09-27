@@ -71,4 +71,20 @@ class CycleCalculatorTest {
         assertEquals(ZonedDateTime.of(2026, 12, 15, 0, 0, 0, 0, zone).toInstant().toEpochMilli(), current.startEpochMillis)
         assertEquals(ZonedDateTime.of(2026, 11, 15, 0, 0, 0, 0, zone).toInstant().toEpochMilli(), previous.startEpochMillis)
     }
+
+    @Test
+    fun `nextCycleStart advances one month`() {
+        val cycleStart = ZonedDateTime.of(2026, 8, 26, 0, 0, 0, 0, zone)
+        val next = CycleCalculator.nextCycleStart(cycleStart, resetDay = 26, resetHour = 0, resetMinute = 0)
+
+        assertEquals(ZonedDateTime.of(2026, 9, 26, 0, 0, 0, 0, zone), next)
+    }
+
+    @Test
+    fun `nextCycleStart clamps into a short month`() {
+        val cycleStart = ZonedDateTime.of(2026, 1, 31, 0, 0, 0, 0, zone)
+        val next = CycleCalculator.nextCycleStart(cycleStart, resetDay = 31, resetHour = 0, resetMinute = 0)
+
+        assertEquals(ZonedDateTime.of(2026, 2, 28, 0, 0, 0, 0, zone), next)
+    }
 }

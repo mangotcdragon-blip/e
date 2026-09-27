@@ -86,21 +86,24 @@ class MainActivity : AppCompatActivity() {
 
         if (snapshot.rolloverApplied) {
             binding.rolloverText.visibility = View.VISIBLE
-            val prevStart = Instant.ofEpochMilli(snapshot.previousCycleStartMillis)
-                .atZone(ZoneId.systemDefault()).format(dateFormatter)
-            val prevEnd = Instant.ofEpochMilli(snapshot.previousCycleEndMillis)
-                .atZone(ZoneId.systemDefault()).format(dateFormatter)
-            binding.rolloverText.text = getString(
-                R.string.rollover_note,
-                ByteFormat.format(snapshot.rolloverBytes),
-                ByteFormat.format(snapshot.previousUsedBytes),
-                ByteFormat.format(snapshot.allowanceBytes),
-                prevStart,
-                prevEnd
-            )
+            binding.rolloverText.text = if (snapshot.previousUsageAvailable) {
+                val prevStart = Instant.ofEpochMilli(snapshot.previousCycleStartMillis)
+                    .atZone(ZoneId.systemDefault()).format(dateFormatter)
+                val prevEnd = Instant.ofEpochMilli(snapshot.previousCycleEndMillis)
+                    .atZone(ZoneId.systemDefault()).format(dateFormatter)
+                getString(
+                    R.string.rollover_note,
+                    ByteFormat.format(snapshot.rolloverBytes),
+                    ByteFormat.format(snapshot.previousUsedBytes),
+                    ByteFormat.format(snapshot.allowanceBytes),
+                    prevStart,
+                    prevEnd
+                )
+            } else {
+                getString(R.string.rollover_note_simple, ByteFormat.format(snapshot.rolloverBytes))
+            }
         } else {
-            // Either rollover is off, or we don't have a real reading for the previous cycle yet
-            // (dataUnavailableText below covers explaining the latter).
+            // Either rollover is off, or the running balance is currently zero.
             binding.rolloverText.visibility = View.GONE
         }
 

@@ -5,6 +5,7 @@ import android.app.usage.NetworkStatsManager
 import android.content.Context
 import android.net.ConnectivityManager
 import android.os.Process
+import java.time.Instant
 import java.time.ZoneId
 import java.time.ZonedDateTime
 
@@ -20,8 +21,11 @@ class DataUsageRepository(private val context: Context) {
         val previousCycleStartMillis: Long,
         val previousCycleEndMillis: Long,
         val previousUsedBytes: Long,
-        /** False if a usage query threw despite having usage access -- the numbers above may
-         * be incomplete/zero rather than reflecting a genuine zero-usage cycle. */
+        /** Whether [previousUsedBytes] reflects a real reading -- purely informational display,
+         * separate from whether rollover itself was applied (see [RolloverLedger]). */
+        val previousUsageAvailable: Boolean,
+        /** False if this cycle's own usage query threw despite having usage access -- [usedBytes]
+         * may be incomplete/zero rather than reflecting genuine zero usage. */
         val usageDataAvailable: Boolean
     ) {
         val totalBytes: Long get() = allowanceBytes + rolloverBytes
@@ -52,26 +56,51 @@ class DataUsageRepository(private val context: Context) {
         )
 
         val usedThisCycle = queryMobileBytes(current.startEpochMillis, current.endEpochMillis)
+
+        // Purely informational: how much was used in the single cycle right before this one,
+        // shown alongside the running rollover balance so it can be sanity-checked. This does
+        // NOT drive the rollover total below -- that's the compounding ledger.
         val previousUsed = if (prefs.rolloverEnabled) {
             queryMobileBytes(previous.startEpochMillis, previous.endEpochMillis)
         } else {
             null
         }
-        // Android tracks usage at the OS level independent of when this app was installed, so
-        // a real reading for the previous cycle is trustworthy regardless of how recently the
-        // user set the app up. The only thing that should block rollover is *not having* a real
-        // reading -- falling back to "assume 0 used" when the query fails would credit a full
-        // extra allowance's worth of rollover, which is the bug this check exists to avoid.
-        val rolloverApplied = prefs.rolloverEnabled && previousUsed != null
-        val rollover = if (rolloverApplied) {
-            (prefs.allowanceBytes - previousUsed!!).coerceAtLeast(0)
+
+        if (prefs.lastProcessedCycleStartMillis <= 0L) {
+            // First-ever run: bootstrap the ledger from just the one previous cycle, since older
+            // cycles generally aren't reliably queryable on a fresh install. From here on,
+            // advance() takes over and properly compounds across however many cycles pass.
+            val bootstrapRollover = if (prefs.rolloverEnabled && previousUsed != null) {
+                (prefs.allowanceBytes - previousUsed).coerceAtLeast(0)
+            } else {
+                0L
+            }
+            prefs.carriedRolloverBytes = bootstrapRollover
+            prefs.lastProcessedCycleStartMillis = current.startEpochMillis
         } else {
-            0L
+            val result = RolloverLedger.advance(
+                lastProcessedCycleStartMillis = prefs.lastProcessedCycleStartMillis,
+                currentCycleStartMillis = current.startEpochMillis,
+                allowanceBytes = prefs.allowanceBytes,
+                rolloverEnabled = prefs.rolloverEnabled,
+                carriedRolloverBytes = prefs.carriedRolloverBytes,
+                nextCycleBoundary = { afterMillis ->
+                    val afterZdt = Instant.ofEpochMilli(afterMillis).atZone(now.zone)
+                    CycleCalculator.nextCycleStart(afterZdt, prefs.resetDay, prefs.resetHour, prefs.resetMinute)
+                        .toInstant().toEpochMilli()
+                },
+                queryUsedBytes = ::queryMobileBytes
+            )
+            prefs.carriedRolloverBytes = result.carriedRolloverBytes
+            prefs.lastProcessedCycleStartMillis = result.lastProcessedCycleStartMillis
         }
+
+        val rolloverBytes = prefs.carriedRolloverBytes
+        val rolloverApplied = prefs.rolloverEnabled && rolloverBytes > 0
 
         return UsageSnapshot(
             allowanceBytes = prefs.allowanceBytes,
-            rolloverBytes = rollover,
+            rolloverBytes = rolloverBytes,
             rolloverApplied = rolloverApplied,
             usedBytes = usedThisCycle ?: 0L,
             cycleStartMillis = current.startEpochMillis,
@@ -79,7 +108,8 @@ class DataUsageRepository(private val context: Context) {
             previousCycleStartMillis = previous.startEpochMillis,
             previousCycleEndMillis = previous.endEpochMillis,
             previousUsedBytes = previousUsed ?: 0L,
-            usageDataAvailable = usedThisCycle != null && (!prefs.rolloverEnabled || previousUsed != null)
+            previousUsageAvailable = previousUsed != null,
+            usageDataAvailable = usedThisCycle != null
         )
     }
 
