@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Compare
 import androidx.compose.material.icons.filled.FolderOpen
+import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.RestartAlt
@@ -98,6 +99,15 @@ fun EditorScreen(viewModel: EditorViewModel) {
 
     val media = viewModel.media
 
+    if (media != null && viewModel.isFullscreen) {
+        FullscreenPlayer(
+            viewModel = viewModel,
+            media = media,
+            onExit = { viewModel.isFullscreen = false },
+        )
+        return
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -105,6 +115,9 @@ fun EditorScreen(viewModel: EditorViewModel) {
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface),
                 actions = {
                     if (media != null) {
+                        IconButton(onClick = { viewModel.isFullscreen = true }) {
+                            Icon(Icons.Filled.Fullscreen, contentDescription = "Fullscreen")
+                        }
                         IconButton(onClick = viewModel::resetAdjustments, enabled = !viewModel.adjustments.isDefault) {
                             Icon(Icons.Filled.RestartAlt, contentDescription = "Reset all adjustments")
                         }
@@ -190,6 +203,18 @@ private fun EditorContent(
                         .align(Alignment.BottomEnd)
                         .padding(12.dp),
                 )
+                Surface(
+                    color = Color.Black.copy(alpha = 0.6f),
+                    contentColor = Color.White,
+                    shape = MaterialTheme.shapes.large,
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(8.dp),
+                ) {
+                    IconButton(onClick = { viewModel.isFullscreen = true }) {
+                        Icon(Icons.Filled.Fullscreen, contentDescription = "Fullscreen")
+                    }
+                }
             }
         }
 
@@ -233,7 +258,7 @@ private fun EditorContent(
 
 /** Press and hold to see the unedited media. */
 @Composable
-private fun CompareButton(
+internal fun CompareButton(
     active: Boolean,
     onActiveChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier,

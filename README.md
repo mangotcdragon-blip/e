@@ -24,6 +24,12 @@ Neon, Dreamy, Negative. Pick one, then fine-tune.
 **Video playback**: play/pause, scrub bar, 5 second skip, loop, mute, speed
 from 0.25x to 2x.
 
+**Fullscreen / cinema mode**: tap the fullscreen button to hide everything but
+the media. The system bars disappear, the screen stays awake, and the phone
+rotates with the sensor even if auto-rotate is switched off, so you can turn it
+sideways and watch like a movie. Tap the media to show or hide the controls;
+press back or the exit button to leave.
+
 **Preview tools**: pinch to zoom, drag to pan, double tap to reset, and a
 "Hold to compare" button that shows the untouched original while pressed.
 

@@ -75,6 +75,8 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
     var adjustments by mutableStateOf(ColorAdjustments())
     var videoState by mutableStateOf(VideoState())
         private set
+    /** Cinema mode; kept here so it survives the rotation it invites. */
+    var isFullscreen by mutableStateOf(false)
 
     val player: ExoPlayer = ExoPlayer.Builder(app).build()
 

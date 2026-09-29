@@ -45,7 +45,7 @@ import kotlin.math.max
 
 /**
  * Shows the loaded image or video with the current adjustments applied live.
- * Pinch to zoom, drag to pan, double tap to reset the view.
+ * Pinch to zoom, drag to pan, double tap to reset the view, single tap reports to [onTap].
  */
 @Composable
 fun MediaPreview(
@@ -55,6 +55,7 @@ fun MediaPreview(
     videoState: VideoState,
     isLoading: Boolean,
     modifier: Modifier = Modifier,
+    onTap: (() -> Unit)? = null,
 ) {
     val matrix = remember(adjustments) { adjustments.toColorMatrix() }
     var zoom by remember(media.uri) { mutableFloatStateOf(1f) }
@@ -70,11 +71,14 @@ fun MediaPreview(
                     pan = if (zoom == 1f) Offset.Zero else pan + dragAmount
                 }
             }
-            .pointerInput(media.uri) {
-                detectTapGestures(onDoubleTap = {
-                    zoom = 1f
-                    pan = Offset.Zero
-                })
+            .pointerInput(media.uri, onTap) {
+                detectTapGestures(
+                    onTap = { onTap?.invoke() },
+                    onDoubleTap = {
+                        zoom = 1f
+                        pan = Offset.Zero
+                    },
+                )
             },
         contentAlignment = Alignment.Center,
     ) {
