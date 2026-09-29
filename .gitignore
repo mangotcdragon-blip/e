@@ -1,0 +1,14 @@
+# Gradle
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+
+# Android Studio / IDE
+.idea/
+*.iml
+local.properties
+.kotlin/
+
+# Misc
+.DS_Store
+captures/
