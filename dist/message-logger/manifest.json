@@ -1,0 +1,1 @@
+{"name":"MessageLogger","description":"Logs messages (including edits and deletions) in the channels you can see, and exports any channel as a .txt file. Built for moderating large servers.","authors":[{"name":"mangotcdragon","id":"0"}],"main":"index.js","vendetta":{"icon":"ic_message_edit"},"hash":"f75b359ade024ca2e9c249c6f949072476f70a41c9d0fce745309bd7b1558d47"}
