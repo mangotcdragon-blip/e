@@ -77,6 +77,19 @@ class SmokeTest {
     }
 
     @Test
+    fun `detect from history button does not crash without usage access`() {
+        val controller = Robolectric.buildActivity(SettingsActivity::class.java)
+        val activity = controller.create().get()
+
+        val binding = com.datatracker.usage.databinding.ActivitySettingsBinding.inflate(activity.layoutInflater)
+        binding.allowanceInput.setText("15")
+        binding.resetDayInput.setText("10")
+        // Usage access isn't granted in this test environment, so the click should just report
+        // that it can't detect anything -- not crash or hang.
+        binding.detectRolloverBtn.performClick()
+    }
+
+    @Test
     @GraphicsMode(GraphicsMode.Mode.NATIVE)
     fun `usage card renders visible text once configured`() {
         val context = ApplicationProvider.getApplicationContext<android.app.Application>()

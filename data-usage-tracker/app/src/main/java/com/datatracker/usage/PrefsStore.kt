@@ -51,8 +51,16 @@ class PrefsStore(context: Context) {
         prefs.edit()
             .putLong(KEY_CARRIED_ROLLOVER, newBalanceBytes.coerceAtLeast(0))
             .putLong(KEY_LAST_PROCESSED_CYCLE, asOfCycleStartMillis)
+            .putInt(KEY_RECONSTRUCTED_CYCLES, 0)
             .apply()
     }
+
+    /** How many past cycles [carriedRolloverBytes] was reconstructed from using the device's own
+     * usage history (see [RolloverLedger.bootstrapFromHistory]). 0 if it was never reconstructed
+     * this way -- e.g. it came from the single-cycle fallback, or a manual override. */
+    var reconstructedCycles: Int
+        get() = prefs.getInt(KEY_RECONSTRUCTED_CYCLES, 0)
+        set(value) = prefs.edit().putInt(KEY_RECONSTRUCTED_CYCLES, value).apply()
 
     companion object {
         private const val PREFS_NAME = "data_tracker_prefs"
@@ -65,6 +73,7 @@ class PrefsStore(context: Context) {
         private const val KEY_FIRST_CONFIGURED_AT = "first_configured_at"
         private const val KEY_CARRIED_ROLLOVER = "carried_rollover_bytes"
         private const val KEY_LAST_PROCESSED_CYCLE = "last_processed_cycle_start"
+        private const val KEY_RECONSTRUCTED_CYCLES = "reconstructed_cycles"
         const val DEFAULT_ALLOWANCE_BYTES = 10L * 1024 * 1024 * 1024 // 10 GB
     }
 }

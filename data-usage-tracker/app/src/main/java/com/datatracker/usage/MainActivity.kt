@@ -86,7 +86,13 @@ class MainActivity : AppCompatActivity() {
 
         if (snapshot.rolloverApplied) {
             binding.rolloverText.visibility = View.VISIBLE
-            binding.rolloverText.text = if (snapshot.previousUsageAvailable) {
+            binding.rolloverText.text = if (snapshot.rolloverReconstructedCycles > 0) {
+                getString(
+                    R.string.rollover_note_reconstructed,
+                    ByteFormat.format(snapshot.rolloverBytes),
+                    snapshot.rolloverReconstructedCycles
+                )
+            } else if (snapshot.previousUsageAvailable) {
                 val prevStart = Instant.ofEpochMilli(snapshot.previousCycleStartMillis)
                     .atZone(ZoneId.systemDefault()).format(dateFormatter)
                 val prevEnd = Instant.ofEpochMilli(snapshot.previousCycleEndMillis)

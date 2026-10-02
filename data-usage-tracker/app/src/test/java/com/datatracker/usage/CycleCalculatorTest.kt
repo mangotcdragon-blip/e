@@ -87,4 +87,29 @@ class CycleCalculatorTest {
 
         assertEquals(ZonedDateTime.of(2026, 2, 28, 0, 0, 0, 0, zone), next)
     }
+
+    @Test
+    fun `previousCycleStart goes back one month`() {
+        val cycleStart = ZonedDateTime.of(2026, 8, 26, 0, 0, 0, 0, zone)
+        val previous = CycleCalculator.previousCycleStart(cycleStart, resetDay = 26, resetHour = 0, resetMinute = 0)
+
+        assertEquals(ZonedDateTime.of(2026, 7, 26, 0, 0, 0, 0, zone), previous)
+    }
+
+    @Test
+    fun `previousCycleStart clamps into a short month`() {
+        val cycleStart = ZonedDateTime.of(2026, 3, 31, 0, 0, 0, 0, zone)
+        val previous = CycleCalculator.previousCycleStart(cycleStart, resetDay = 31, resetHour = 0, resetMinute = 0)
+
+        assertEquals(ZonedDateTime.of(2026, 2, 28, 0, 0, 0, 0, zone), previous)
+    }
+
+    @Test
+    fun `previousCycleStart and nextCycleStart are mirror images`() {
+        val cycleStart = ZonedDateTime.of(2026, 5, 10, 0, 0, 0, 0, zone)
+        val next = CycleCalculator.nextCycleStart(cycleStart, resetDay = 10, resetHour = 0, resetMinute = 0)
+        val backAgain = CycleCalculator.previousCycleStart(next, resetDay = 10, resetHour = 0, resetMinute = 0)
+
+        assertEquals(cycleStart, backAgain)
+    }
 }

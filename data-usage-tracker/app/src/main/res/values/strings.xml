@@ -7,6 +7,7 @@
     <string name="cycle_range">Cycle: %1$s – %2$s</string>
     <string name="rollover_note">Includes %1$s rolled over from previous cycles (last cycle: %2$s used of %3$s, %4$s–%5$s)</string>
     <string name="rollover_note_simple">Includes %1$s rolled over from previous cycles</string>
+    <string name="rollover_note_reconstructed">Includes %1$s rolled over, reconstructed from %2$d billing cycles of your phone\'s usage history</string>
     <string name="data_unavailable_note">Couldn\'t read usage data for part of this cycle — numbers below may be incomplete</string>
 
     <string name="action_settings">Settings</string>
@@ -25,7 +26,12 @@
     <string name="label_reset_time">Reset time</string>
     <string name="label_rollover">Roll over unused data from last cycle</string>
     <string name="label_rollover_balance">Current rollover balance (GB)</string>
-    <string name="rollover_balance_help">Auto-calculated, but you can set this to match what your carrier reports if they differ (e.g. multiple accumulated cycles this app couldn\'t reconstruct)</string>
+    <string name="rollover_balance_help">Auto-detected from your phone\'s usage history where possible. If it still doesn\'t match what your carrier reports, you can type the correct number in here instead.</string>
+    <string name="action_detect_rollover">Detect from usage history</string>
+    <string name="detect_rollover_success">Found %1$s rolled over, reconstructed from %2$d billing cycles</string>
+    <string name="detect_rollover_failure">Couldn\'t find a clear starting point in your usage history — try entering the balance above manually instead</string>
+    <string name="detect_rollover_needs_access">Grant usage access first, then try again</string>
+    <string name="detect_rollover_missing_fields">Fill in your allowance and reset day first</string>
 
     <string name="hint_allowance">e.g. 20</string>
     <string name="hint_reset_day">1–31</string>

@@ -155,6 +155,16 @@
             android:text="@string/rollover_balance_help"
             android:textColor="@color/text_muted"
             android:textSize="12sp"
+            android:layout_marginBottom="12dp" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/detectRolloverBtn"
+            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/action_detect_rollover"
+            app:strokeColor="@color/accent"
+            android:textColor="@color/accent"
             android:layout_marginBottom="28dp" />
 
         <com.google.android.material.button.MaterialButton

@@ -10,6 +10,7 @@ class RolloverLedgerTest {
 
     /** A simple fixed-interval boundary stepper for tests, standing in for CycleCalculator. */
     private fun stepper(intervalMillis: Long): (Long) -> Long = { it + intervalMillis }
+    private fun backStepper(intervalMillis: Long): (Long) -> Long = { it - intervalMillis }
 
     @Test
     fun `rollover disabled always resets to zero`() {
@@ -136,5 +137,78 @@ class RolloverLedgerTest {
         val expected = GB + (0.5 * GB).toLong() - (0.4 * GB).toLong()
         assertEquals(expected, result.carriedRolloverBytes)
         assertEquals(3 * ONE_DAY, result.lastProcessedCycleStartMillis)
+    }
+
+    @Test
+    fun `bootstrapFromHistory finds where usage history begins and compounds forward from it`() {
+        // History begins at cycle boundary 100 days in (standing in for a real epoch-millis
+        // date, always far from zero -- 0 itself is reserved as the "not bootstrapped" sentinel,
+        // see advance()); five cycles each used 0.3 GB of a 1 GB allowance, netting +0.7 GB every
+        // time.
+        val historyBegins = 100 * ONE_DAY
+        val current = historyBegins + 5 * ONE_DAY
+        val usedPerCycle = (0.3 * GB).toLong()
+
+        val result = RolloverLedger.bootstrapFromHistory(
+            currentCycleStartMillis = current,
+            allowanceBytes = GB,
+            rolloverEnabled = true,
+            maxLookbackCycles = 10,
+            previousCycleBoundary = backStepper(ONE_DAY),
+            nextCycleBoundary = stepper(ONE_DAY),
+            queryUsageBeforeMillis = { before -> if (before <= historyBegins) 0L else 999L },
+            queryUsedBytes = { _, _ -> usedPerCycle }
+        )
+
+        assertEquals(5, result?.cyclesReconstructed)
+        assertEquals(historyBegins, result?.earliestCycleStartMillis)
+        assertEquals(current, result?.lastProcessedCycleStartMillis)
+        val expected = (GB - usedPerCycle) * 5
+        assertEquals(expected, result?.carriedRolloverBytes)
+    }
+
+    @Test
+    fun `bootstrapFromHistory gives up when history never bottoms out within the lookback cap`() {
+        val result = RolloverLedger.bootstrapFromHistory(
+            currentCycleStartMillis = 20 * ONE_DAY,
+            allowanceBytes = GB,
+            rolloverEnabled = true,
+            maxLookbackCycles = 5,
+            previousCycleBoundary = backStepper(ONE_DAY),
+            nextCycleBoundary = stepper(ONE_DAY),
+            queryUsageBeforeMillis = { _ -> 999L }, // never finds a zero point
+            queryUsedBytes = { _, _ -> error("should not be queried without a found boundary") }
+        )
+        assertEquals(null, result)
+    }
+
+    @Test
+    fun `bootstrapFromHistory bails out when a history query is unavailable`() {
+        val result = RolloverLedger.bootstrapFromHistory(
+            currentCycleStartMillis = 20 * ONE_DAY,
+            allowanceBytes = GB,
+            rolloverEnabled = true,
+            maxLookbackCycles = 10,
+            previousCycleBoundary = backStepper(ONE_DAY),
+            nextCycleBoundary = stepper(ONE_DAY),
+            queryUsageBeforeMillis = { _ -> null },
+            queryUsedBytes = { _, _ -> error("should not be queried") }
+        )
+        assertEquals(null, result)
+    }
+
+    @Test
+    fun `bootstrapFromHistory does nothing when rollover is disabled`() {
+        val result = RolloverLedger.bootstrapFromHistory(
+            currentCycleStartMillis = 20 * ONE_DAY,
+            allowanceBytes = GB,
+            rolloverEnabled = false,
+            maxLookbackCycles = 10,
+            previousCycleBoundary = backStepper(ONE_DAY),
+            nextCycleBoundary = stepper(ONE_DAY),
+            queryUsageBeforeMillis = { _ -> error("should not be queried") },
+            queryUsedBytes = { _, _ -> error("should not be queried") }
+        )
+        assertEquals(null, result)
     }
 }

@@ -56,6 +56,21 @@ object CycleCalculator {
         return resetInstantFor(nextMonth, resetDay, resetHour, resetMinute, cycleStart.zone)
     }
 
+    /**
+     * Given the start of some cycle, returns the start of the *previous* one -- the mirror of
+     * [nextCycleStart], used to walk backward through history looking for where recorded usage
+     * data actually begins.
+     */
+    fun previousCycleStart(
+        cycleStart: ZonedDateTime,
+        resetDay: Int,
+        resetHour: Int,
+        resetMinute: Int
+    ): ZonedDateTime {
+        val previousMonth = YearMonth.from(cycleStart).minusMonths(1)
+        return resetInstantFor(previousMonth, resetDay, resetHour, resetMinute, cycleStart.zone)
+    }
+
     private fun resetInstantFor(
         yearMonth: YearMonth,
         day: Int,
