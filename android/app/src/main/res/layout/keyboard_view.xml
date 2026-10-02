@@ -1,0 +1,119 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:background="@color/keyboard_bg">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="40dp"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:background="@color/toolbar_bg"
+        android:paddingStart="4dp"
+        android:paddingEnd="4dp">
+
+        <ImageButton
+            android:id="@+id/btnSettings"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:layout_margin="2dp"
+            android:background="?android:attr/selectableItemBackgroundBorderless"
+            android:src="@drawable/ic_toolbar_settings"
+            android:contentDescription="@string/toolbar_settings"
+            android:tint="@color/toolbar_icon" />
+
+        <TextView
+            android:id="@+id/status_text"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:gravity="center"
+            android:textColor="@color/suggestion_text"
+            android:textSize="13sp"
+            android:maxLines="1"
+            android:ellipsize="end"
+            android:text="" />
+
+        <ImageButton
+            android:id="@+id/btnEmoji"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:layout_margin="2dp"
+            android:background="?android:attr/selectableItemBackgroundBorderless"
+            android:src="@drawable/ic_key_emoji"
+            android:contentDescription="@string/toolbar_emoji"
+            android:tint="@color/toolbar_icon" />
+
+        <ImageButton
+            android:id="@+id/btnClipboard"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:layout_margin="2dp"
+            android:background="?android:attr/selectableItemBackgroundBorderless"
+            android:src="@drawable/ic_toolbar_clipboard"
+            android:contentDescription="@string/toolbar_clipboard"
+            android:tint="@color/toolbar_icon" />
+
+        <ImageButton
+            android:id="@+id/btnOneHanded"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:layout_margin="2dp"
+            android:background="?android:attr/selectableItemBackgroundBorderless"
+            android:src="@drawable/ic_toolbar_onehanded"
+            android:contentDescription="@string/toolbar_one_handed"
+            android:tint="@color/toolbar_icon" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/oneHandedRow"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal">
+
+        <View
+            android:id="@+id/leftSpacer"
+            android:layout_width="0dp"
+            android:layout_height="1dp"
+            android:layout_weight="0" />
+
+        <FrameLayout
+            android:id="@+id/pageContainer"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1">
+
+            <com.customautocorrect.keyboard.GboardKeyboardView
+                android:id="@+id/keyboard_view"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@color/keyboard_bg"
+                android:keyBackground="@drawable/key_background"
+                android:keyTextColor="@color/key_text"
+                android:keyTextSize="20sp"
+                android:labelTextSize="15sp"
+                android:keyPreviewLayout="@null"
+                android:shadowColor="#00000000"
+                android:shadowRadius="0"
+                android:padding="4dp" />
+
+            <include
+                android:id="@+id/emojiPage"
+                layout="@layout/emoji_picker"
+                android:visibility="gone" />
+
+            <include
+                android:id="@+id/clipboardPage"
+                layout="@layout/clipboard_page"
+                android:visibility="gone" />
+        </FrameLayout>
+
+        <View
+            android:id="@+id/rightSpacer"
+            android:layout_width="0dp"
+            android:layout_height="1dp"
+            android:layout_weight="0" />
+    </LinearLayout>
+</LinearLayout>

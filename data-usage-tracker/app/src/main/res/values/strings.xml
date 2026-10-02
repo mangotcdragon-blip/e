@@ -1,0 +1,42 @@
+<resources>
+    <string name="app_name">Data Tracker</string>
+    <string name="title_settings">Settings</string>
+
+    <string name="remaining_of">%1$s left of %2$s</string>
+    <string name="used_label">%1$s used this cycle</string>
+    <string name="cycle_range">Cycle: %1$s – %2$s</string>
+    <string name="rollover_note">Includes %1$s rolled over from previous cycles (last cycle: %2$s used of %3$s, %4$s–%5$s)</string>
+    <string name="rollover_note_simple">Includes %1$s rolled over from previous cycles</string>
+    <string name="rollover_note_reconstructed">Includes %1$s rolled over, reconstructed from %2$d billing cycles of your phone\'s usage history</string>
+    <string name="data_unavailable_note">Couldn\'t read usage data for part of this cycle — numbers below may be incomplete</string>
+
+    <string name="action_settings">Settings</string>
+    <string name="action_refresh">Refresh</string>
+    <string name="action_grant_access">Grant usage access</string>
+    <string name="action_save">Save</string>
+
+    <string name="permission_needed_title">Usage access needed</string>
+    <string name="permission_needed_body">This app needs the "Usage access" permission to read your mobile data usage. Android requires this to be granted from Settings, not a normal popup.</string>
+
+    <string name="setup_needed_title">Set up your plan</string>
+    <string name="setup_needed_body">Tell Data Tracker how much data you get each month and when your billing cycle resets.</string>
+
+    <string name="label_allowance">Monthly data allowance (GB)</string>
+    <string name="label_reset_day">Reset day of month</string>
+    <string name="label_reset_time">Reset time</string>
+    <string name="label_rollover">Roll over unused data from last cycle</string>
+    <string name="label_rollover_balance">Current rollover balance (GB)</string>
+    <string name="rollover_balance_help">Auto-detected from your phone\'s usage history where possible. If it still doesn\'t match what your carrier reports, you can type the correct number in here instead.</string>
+    <string name="action_detect_rollover">Detect from usage history</string>
+    <string name="detect_rollover_success">Found %1$s rolled over, reconstructed from %2$d billing cycles</string>
+    <string name="detect_rollover_failure">Couldn\'t find a clear starting point in your usage history — try entering the balance above manually instead</string>
+    <string name="detect_rollover_needs_access">Grant usage access first, then try again</string>
+    <string name="detect_rollover_missing_fields">Fill in your allowance and reset day first</string>
+
+    <string name="hint_allowance">e.g. 20</string>
+    <string name="hint_reset_day">1–31</string>
+    <string name="hint_rollover_balance">e.g. 3.8</string>
+
+    <string name="notification_channel_name">Data usage</string>
+    <string name="notification_channel_desc">Shows remaining mobile data for the current billing cycle</string>
+</resources>
