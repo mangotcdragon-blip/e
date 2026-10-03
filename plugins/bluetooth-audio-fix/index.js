@@ -92,7 +92,7 @@
     // Every Flux action type seen, with a count.
     const fluxTypes = {};
     const log = [];
-    const MAX_LOG = 80;
+    const MAX_LOG = 150;
 
     // Last known device list entries, filled from device getters and Flux payloads.
     let bluetoothDevice = null;
@@ -320,7 +320,7 @@
         try {
             const sub = RN.AppState.addEventListener("change", state => {
                 appState = state;
-                if (inVoice()) record("app", "AppState", `${state} (in voice)`);
+                if (inVoice() || sharing) record("app", "AppState", `${state}${sharing ? " (sharing)" : " (in voice)"}`);
             });
             unpatches.push(() => { try { sub.remove(); } catch {} });
         } catch (e) {
@@ -433,6 +433,16 @@
                     return Promise.resolve();
                 }
                 return orig(...args);
+            } };
+        }
+        // Trace what the media engine does while you share and Discord is in the background,
+        // to see whether Discord itself turns the mic off when you leave the app.
+        const handledElsewhere = SPEAKER_SETTER.test(key) || ROUTE_SETTER.test(key) || DEVICE_GETTER.test(key) || callModeRule(key, true);
+        if (/mediaengine/i.test(label) && !handledElsewhere && !/^(addListener|removeListeners|getConstants)$|stats|survey|fingerprint|keypackage|mls|secureframes|encryption/i.test(key)) {
+            return { kind: "before", cb(args) {
+                if (appState !== "active" && (sharing || inVoice())) {
+                    record("bg", where, args.map(a => describe(a)).join(", ").slice(0, 200));
+                }
             } };
         }
         if (telecom && !/^(addListener|removeListeners|getConstants)$/.test(key)) {
@@ -693,6 +703,9 @@
             const action = args[0];
             if (!action || typeof action.type !== "string") return;
             fluxTypes[action.type] = (fluxTypes[action.type] || 0) + 1;
+            if (appState !== "active" && sharing && !/^(TYPING|PRESENCE|MESSAGE|SPEAKING|VOICE_STATE_UPDATES|RTC_CONNECTION_PING)/.test(action.type)) {
+                record("bg-flux", action.type, "");
+            }
             if (action.type === "STREAM_START") setSharing(true, "flux:STREAM_START");
             else if (action.type === "STREAM_STOP") setSharing(false, "flux:STREAM_STOP");
             // Voice code may load only when a call starts, so scan again then.
@@ -751,7 +764,7 @@
 
     function diagnostics() {
         const lines = [];
-        lines.push("BluetoothAudioFix diagnostics v7");
+        lines.push("BluetoothAudioFix diagnostics v8");
         lines.push(`File paths available: ${Object.values(metro.modules || {}).some(m => m && m.__filePath)}`);
         lines.push(`Platform: ${RN.Platform.OS} ${RN.Platform.Version}`);
         lines.push(`Settings: ${JSON.stringify({ ...store })}`);
@@ -766,7 +779,7 @@
         lines.push("");
         lines.push("Recent events:");
         if (!log.length) lines.push("  (none yet - join a voice channel first)");
-        for (const e of log.slice(-40)) lines.push(`  ${e.t} [${e.kind}] ${e.where} ${e.detail || ""}`);
+        for (const e of log.slice(-80)) lines.push(`  ${e.t} [${e.kind}] ${e.where} ${e.detail || ""}`);
         lines.push("");
         lines.push(`Bluetooth device: ${bluetoothKnown() ? describe(bluetoothDevice) : "none detected"}`);
         lines.push("");
