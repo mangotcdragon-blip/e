@@ -825,7 +825,9 @@
     }
 
     function Settings() {
-        vdStorage.useProxy(store);
+        // No vdStorage.useProxy: on a fresh install Kettu can hand plugins a storage object without
+        // the proxy's event emitter, and useProxy then throws "storage?.[emitterSymbol] is undefined".
+        // Re-render ourselves after each change instead.
         const [, force] = React.useReducer(x => x + 1, 0);
         const { ScrollView, Text } = RN;
         const { FormSection, FormSwitchRow, FormRow, FormDivider } = ui.components.Forms;
@@ -835,7 +837,7 @@
             label,
             subLabel,
             value: !!store[key],
-            onValueChange: v => { store[key] = v; },
+            onValueChange: v => { store[key] = v; force(); },
         });
 
         return h(ScrollView, { style: { flex: 1 } },
