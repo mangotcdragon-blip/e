@@ -194,7 +194,16 @@
                     return ret;
                 }
             }
-            return cb.call(this, args, (...a) => orig.apply(this, a));
+            // A bug in an "instead" callback must never reach Discord: an error thrown during
+            // POST_CONNECTION_OPEN makes it reset the gateway socket and wipe its caches.
+            let origCalled = false;
+            try {
+                return cb.call(this, args, (...a) => { origCalled = true; return orig.apply(this, a); });
+            } catch (e) {
+                if (origCalled) throw e; // Discord's own method threw; pass that through unchanged.
+                record("error", `${label}.${method}`, String(e && e.message || e));
+                return orig.apply(this, args);
+            }
         };
 
         let error = "";
@@ -288,9 +297,9 @@
         sharing = on;
         record("share", where, on ? "screen share started" : "screen share stopped");
         if (!on || !store.blockTelecom || !store.callWhileSharing) return;
-        for (const key of ["startCall", "setCallActive"]) {
+        ["startCall", "setCallActive"].forEach(key => {
             const held = heldCall[key];
-            if (!held) continue;
+            if (!held) return;
             heldCall[key] = null;
             try {
                 const ret = held.orig(...held.args);
@@ -299,7 +308,7 @@
             } catch (e) {
                 record("error", key, String(e && e.message || e));
             }
-        }
+        });
     }
 
     // Whether Discord is on screen ("active") or behind another app ("background").
@@ -462,15 +471,17 @@
         const hasAudioContext = AUDIO_CONTEXT.test(label) || keys.some(k => AUDIO_CONTEXT.test(k));
         const methods = [];
 
-        for (const key of keys) {
+        // One function call per key: Hermes can share a single loop binding between every
+        // closure made in a for-of body, so each patch must capture its own key and rule.
+        keys.forEach(key => {
             let fn;
-            try { fn = target[key]; } catch { continue; }
-            if (typeof fn !== "function") continue;
+            try { fn = target[key]; } catch { return; }
+            if (typeof fn !== "function") return;
 
             const known = knownRule(key, label);
             if (known) {
                 if (safePatch(known.kind, key, target, known.cb)) methods.push(key);
-                continue;
+                return;
             }
 
             const rule = callModeRule(key, hasAudioContext);
@@ -547,7 +558,7 @@
                 });
                 if (ok) methods.push(key);
             }
-        }
+        });
 
         if (methods.length) {
             patchedTargets.push({ target, label, methods });
