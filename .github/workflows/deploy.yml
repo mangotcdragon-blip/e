@@ -1,0 +1,51 @@
+name: Build and deploy
+
+on:
+    push:
+        branches: [main, master]
+    workflow_dispatch:
+
+concurrency:
+    group: pages-deploy
+    cancel-in-progress: false
+
+jobs:
+    deploy:
+        runs-on: ubuntu-latest
+        permissions:
+            contents: write
+
+        steps:
+            - uses: actions/checkout@v4
+
+            - uses: pnpm/action-setup@v4
+              with:
+                  version: 10
+
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: "22"
+                  cache: pnpm
+
+            - name: Install deps
+              run: pnpm install --frozen-lockfile
+
+            - name: Build plugin(s)
+              run: node ./build.mjs
+
+              # Copies the README to the site root and makes the 404 page show it,
+              # so clicking a plugin link in a browser explains what to do instead of erroring.
+            - name: Copy additional files
+              run: |
+                  cp README.md dist/README.md
+                  printf -- "---\npermalink: /404.html\n---\n" > dist/404.md
+                  printf -- "> **Note:** You accessed a link that returned a 404, probably by clicking one of the plugin links. Copy the link address and paste it into the Plugins page of your client instead.\n\n" >> dist/404.md
+                  cat README.md >> dist/404.md
+
+              # Documentation: https://github.com/peaceiris/actions-gh-pages
+            - name: Deploy to GitHub Pages
+              uses: peaceiris/actions-gh-pages@v4
+              with:
+                  github_token: ${{ secrets.GITHUB_TOKEN }}
+                  publish_dir: ./dist
+                  enable_jekyll: true
