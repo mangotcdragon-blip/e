@@ -16,6 +16,10 @@
         toasts: false,
         callWhileSharing: false,
         keepMicInBackground: true,
+        // Wraps whole Discord source files, stores and the media engine just to log what they do.
+        // Off by default: wrapping Discord's Flux stores can stall its UI (buttons stop responding,
+        // messages stop loading, speaking indicators get stuck).
+        deepTrace: false,
     };
     for (const key in defaults) if (store[key] === undefined) store[key] = defaults[key];
     delete store.allowCallWhileSharing; // v5 setting, replaced by callWhileSharing (off by default)
@@ -453,7 +457,7 @@
         // Trace what the media engine does while you share and Discord is in the background,
         // to see whether Discord itself turns the mic off when you leave the app.
         const handledElsewhere = SPEAKER_SETTER.test(key) || ROUTE_SETTER.test(key) || DEVICE_GETTER.test(key) || callModeRule(key, true);
-        if (/mediaengine/i.test(label) && !handledElsewhere && !/^(addListener|removeListeners|getConstants)$|stats|survey|fingerprint|keypackage|mls|secureframes|encryption/i.test(key)) {
+        if (store.deepTrace && /mediaengine/i.test(label) && !handledElsewhere && !/^(addListener|removeListeners|getConstants)$|stats|survey|fingerprint|keypackage|mls|secureframes|encryption/i.test(key)) {
             return { kind: "before", cb(args) {
                 if (appState !== "active" && (sharing || inVoice())) {
                     record("bg", where, args.map(a => describe(a)).join(", ").slice(0, 200));
@@ -716,7 +720,7 @@
     function watchFlux() {
         if (!FluxDispatcher || typeof FluxDispatcher.dispatch !== "function") return;
         // Kettu's patcher knows how to patch its lazily loaded common modules, so use it here.
-        const un = patcher.before("dispatch", FluxDispatcher, args => {
+        const onDispatch = args => {
             const action = args[0];
             if (!action || typeof action.type !== "string") return;
             fluxTypes[action.type] = (fluxTypes[action.type] || 0) + 1;
@@ -736,6 +740,11 @@
                     rememberDevices(value, `flux:${type}.${key}`);
                 }
             }
+        };
+        // Never let an error from here reach Discord's dispatcher: a failed dispatch can leave
+        // its stores stuck and the UI stops updating.
+        const un = patcher.before("dispatch", FluxDispatcher, args => {
+            try { onDispatch(args); } catch (e) { record("error", "flux", String(e && e.message || e)); }
         });
         unpatches.push(un);
     }
@@ -751,8 +760,9 @@
         }, 1500);
     }
 
-    function scan(deep) {
+    function scan(deep, full = store.deepTrace) {
         scanNativeModules();
+        if (!full) return;
         try { scanFilePaths(deep); } catch (e) { logger.warn("File scan failed", e); }
         scanJsModules();
     }
@@ -879,17 +889,19 @@
                 h(FormDivider),
                 h(FormRow, {
                     label: "Rescan audio modules",
-                    onPress: () => { scan(false); force(); ui.toasts.showToast(`${patchedTargets.length} audio target(s) patched`); },
+                    onPress: () => { scan(false, true); force(); ui.toasts.showToast(`${patchedTargets.length} audio target(s) patched`); },
                 }),
                 h(FormDivider),
                 h(FormRow, {
                     label: "Deep scan",
                     subLabel: "Also load Discord's audio code that hasn't started yet. Try this if the normal scan finds nothing",
-                    onPress: () => { scan(true); force(); ui.toasts.showToast(`${patchedTargets.length} audio target(s) patched`); },
+                    onPress: () => { scan(true, true); force(); ui.toasts.showToast(`${patchedTargets.length} audio target(s) patched`); },
                 }),
             ),
             h(FormSection, { title: "Diagnostics" },
                 toggle("watchFlux", "Log audio events", "Record Discord's audio actions for troubleshooting"),
+                h(FormDivider),
+                toggle("deepTrace", "Deep tracing (slows Discord)", "Also wrap Discord's voice files and stores to log everything they do. Can freeze Discord's UI; only turn on briefly for diagnostics, then restart Discord"),
                 h(FormDivider),
                 toggle("toasts", "Show toasts", "Pop up a message whenever the plugin blocks something"),
                 h(FormDivider),
