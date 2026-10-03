@@ -38,6 +38,7 @@
     const DEACTIVATE = /^(stop|disable|exit|leave|end|clear|release|reset|disconnect|unregister|remove|hide)/i;
     const CALL_MODE = /communicationmode|callmode|callaudio|incallmode|in_call_mode|incallaudio|voipmode|audiomode/i;
     const BARE_MODE = /^set(audio)?mode$/i;
+    const AUDIO_MODE_VALUE = /^(mode_)?(in_?)?(call|communication|voip|voice_?(call|communication))$/i;
     const COMM_DEVICE = /^set\w*communicationdevice/i;
     const SCO = /bluetoothsco|scoaudio|^startsco|^setsco|scoon$/i;
     const TELECOM = /telecom|connectionservice|phoneaccount|callkit|callkeep|callstyle|ongoingcall|selfmanaged|systemcall|nativecall/i;
@@ -234,12 +235,15 @@
 
     // Returns the arguments that keep the phone out of call mode, or null to skip the call entirely.
     function callModeArgs(args, key) {
-        if (args.length === 0) return /mode|sco|communication|callaudio|telecom|connectionservice/i.test(key) ? null : args;
+        if (args.length === 0) return BARE_MODE.test(key) ? args : /mode|sco|communication|callaudio|telecom|connectionservice/i.test(key) ? null : args;
         const first = args[0];
         const next = args.slice();
         if (first === true) next[0] = false;
         else if (first === 2 || first === 3) next[0] = 0; // MODE_IN_CALL / MODE_IN_COMMUNICATION -> MODE_NORMAL
-        else if (typeof first === "string" && /communication|call|voip|voice/i.test(first)) {
+        // Only Android audio-mode names. Discord's voice connection also has a setMode() whose
+        // argument is the input mode (VOICE_ACTIVITY / PUSH_TO_TALK); rewriting that one makes
+        // getConnectionTransportOptions throw "Unknown Input Mode: NORMAL".
+        else if (typeof first === "string" && AUDIO_MODE_VALUE.test(first)) {
             next[0] = /^MODE_/.test(first) ? "MODE_NORMAL" : first === first.toUpperCase() ? "NORMAL" : "normal";
         }
         return next;
