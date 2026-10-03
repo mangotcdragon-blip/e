@@ -22,7 +22,8 @@
 
     // Name patterns used to discover Discord's audio routing code at runtime.
     // Discord's internal names change between versions, so nothing is hardcoded to one module.
-    const SPEAKER_SETTER = /^(set|force|enable|toggle|use)\w*speaker/i;
+    // No "use" prefix: that matched React hooks like useMaskedSpeakerStates, which run on every render.
+    const SPEAKER_SETTER = /^(set|force|enable|toggle)\w*speaker/i;
     const ROUTE_SETTER = /^(set|select|switch|change|use|update)\w*(device|route)$/i;
     const DEVICE_GETTER = /^get\w*(devices|routes|device|route)$/i;
     const AUDIO_CONTEXT = /audio|speaker|bluetooth|earpiece|headset|sco|a2dp|communication/i;
@@ -120,7 +121,7 @@
         if (typeof value === "string") return value;
         if (typeof value !== "object") return "";
         const parts = [];
-        for (const key of ["type", "deviceType", "name", "id", "deviceId", "label", "kind", "route", "productName"]) {
+        for (const key of ["type", "deviceType", "simpleDeviceType", "name", "deviceName", "id", "deviceId", "label", "kind", "route", "productName"]) {
             if (typeof value[key] === "string" || typeof value[key] === "number") parts.push(String(value[key]));
         }
         return parts.join(" ");
@@ -138,14 +139,15 @@
 
     function rememberDevices(list, where) {
         if (!Array.isArray(list)) {
-            if (list && typeof list === "object") list = Object.values(list);
-            else return;
+            if (!list || typeof list !== "object") return;
+            // A single device ({deviceName, deviceId, ...}) or a map of devices ({default: {...}}).
+            list = textOf(list) !== "" ? [list] : Object.values(list);
         }
         const bt = list.find(d => isBluetooth(d) && !(d && typeof d === "object" && INPUT_ONLY.test(textOf(d))));
         if (bt) {
             bluetoothDevice = bt;
             record("bt", where, describe(bt));
-        } else if (list.length > 0 && list.every(d => textOf(d) !== "")) {
+        } else if (list.length > 0 && list.every(d => textOf(d) !== "" && !/^default\b/i.test(textOf(d)))) {
             // A full list without any Bluetooth entry means the earbuds are gone.
             bluetoothDevice = null;
         }
@@ -741,7 +743,12 @@
     let scanTimer = null;
     function scheduleScan() {
         if (scanTimer) return;
-        scanTimer = setTimeout(() => { scanTimer = null; scan(false); }, 1500);
+        // Light rescan only: the full JS module search walks every module in Discord and stalls the UI.
+        scanTimer = setTimeout(() => {
+            scanTimer = null;
+            scanNativeModules();
+            try { scanFilePaths(false); } catch (e) { logger.warn("File scan failed", e); }
+        }, 1500);
     }
 
     function scan(deep) {
