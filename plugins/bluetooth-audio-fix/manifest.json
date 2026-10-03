@@ -3,6 +3,6 @@
     "description": "Stops Discord from putting your phone into call mode and keeps its audio on your Bluetooth earbuds at full quality.",
     "authors": [{ "name": "mangotcdragon" }],
     "main": "index.js",
-    "hash": "1e6f4b4c486d00975dd0bf9526a99cf3d5383408409826dd1d00279bdf8f1925",
+    "hash": "49ca69815cdb7611cc07507a355d9700d1a7e982ad8fe02f3b359cd2c5832899",
     "vendetta": { "icon": "ic_headset" }
 }

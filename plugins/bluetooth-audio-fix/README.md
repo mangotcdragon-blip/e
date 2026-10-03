@@ -22,6 +22,8 @@ speaker, even though your Bluetooth earbuds are still connected.
   then plays audio on the connected Bluetooth device again.
 - If Discord selects the speaker as its output device, the plugin selects your Bluetooth
   device instead.
+- Keeps your mic on when you switch to another app during a voice call ("Keep mic on in
+  other apps"), if Discord is the one switching it off.
 - Adds a "Send audio back to Bluetooth now" button for when audio is already stuck on the
   speaker.
 - Adds a diagnostics log you can copy, listing which Discord audio functions it found and

@@ -15,6 +15,7 @@
         watchFlux: true,
         toasts: false,
         callWhileSharing: false,
+        keepMicInBackground: true,
     };
     for (const key in defaults) if (store[key] === undefined) store[key] = defaults[key];
     delete store.allowCallWhileSharing; // v5 setting, replaced by callWhileSharing (off by default)
@@ -73,7 +74,8 @@
     PROBE_METHODS.push("setSCORetryCount", "setActiveAudioDevice", "getActiveAudioDevice", "isAvailable",
         "startCall", "setCallActive", "endCall", "reportIncomingCall", "registerIncomingCall",
         "startBroadcast", "stopBroadcast", "stopBroadcastWithError", "createOwnStreamConnectionWithOptions",
-        "setScreenShareState", "setMicMuted", "cancelIncomingCall");
+        "setScreenShareState", "setMicMuted", "cancelIncomingCall", "setAudioInputEnabled",
+        "stopLocalAudioRecording", "startLocalAudioRecording", "connectionInstanceSetSelfMute");
 
     // Discord source files worth scanning, by path.
     const AUDIO_PATH = /audio|voice|speaker|bluetooth|telecom|mediaengine|media_engine|rtc|incall|callkit|connectionservice|\bsco\b|headset/i;
@@ -300,6 +302,32 @@
         }
     }
 
+    // Whether Discord is on screen ("active") or behind another app ("background").
+    let appState = "active";
+    try { appState = RN.AppState.currentState || "active"; } catch {}
+
+    let voiceStore = null;
+    function inVoice() {
+        try {
+            if (!voiceStore) voiceStore = metro.findByStoreName("SelectedChannelStore");
+            return !!(voiceStore && voiceStore.getVoiceChannelId());
+        } catch {
+            return false;
+        }
+    }
+
+    function watchAppState() {
+        try {
+            const sub = RN.AppState.addEventListener("change", state => {
+                appState = state;
+                if (inVoice()) record("app", "AppState", `${state} (in voice)`);
+            });
+            unpatches.push(() => { try { sub.remove(); } catch {} });
+        } catch (e) {
+            logger.warn("Could not watch app state", e);
+        }
+    }
+
     function knownRule(key, label) {
         const where = `${label}.${key}`;
         const telecom = /telecom/i.test(label);
@@ -337,6 +365,24 @@
                     return Promise.resolve();
                 }
                 return orig(...args);
+            } };
+        }
+        // Discord may switch the microphone off when you leave the app. While you're in a voice
+        // channel, keep it on so people still hear you from other apps.
+        if (key === "setAudioInputEnabled") {
+            return { kind: "instead", cb(args, orig) {
+                record("call", where, `${describe(args[0])} (app ${appState})`);
+                if (args[0] === false && store.keepMicInBackground && appState !== "active" && inVoice()) {
+                    record("block", where, "kept mic on while in background");
+                    notify("Kept mic on");
+                    return Promise.resolve();
+                }
+                return orig(...args);
+            } };
+        }
+        if (key === "stopLocalAudioRecording" || key === "startLocalAudioRecording" || key === "connectionInstanceSetSelfMute") {
+            return { kind: "before", cb(args) {
+                record("call", where, `${args.map(a => describe(a)).join(", ")} (app ${appState})`);
             } };
         }
         if (key === "startBroadcast" || key === "createOwnStreamConnectionWithOptions") {
@@ -705,11 +751,11 @@
 
     function diagnostics() {
         const lines = [];
-        lines.push("BluetoothAudioFix diagnostics v6");
+        lines.push("BluetoothAudioFix diagnostics v7");
         lines.push(`File paths available: ${Object.values(metro.modules || {}).some(m => m && m.__filePath)}`);
         lines.push(`Platform: ${RN.Platform.OS} ${RN.Platform.Version}`);
         lines.push(`Settings: ${JSON.stringify({ ...store })}`);
-        lines.push(`Screen sharing: ${sharing}, held system call: ${heldCall.startCall ? "yes" : "no"}`);
+        lines.push(`Screen sharing: ${sharing}, held system call: ${heldCall.startCall ? "yes" : "no"}, app: ${appState}, in voice: ${inVoice()}`);
         lines.push("");
         lines.push("Patched targets:");
         if (!patchedTargets.length) lines.push("  (none found)");
@@ -772,6 +818,8 @@
                 h(FormDivider),
                 toggle("blockTelecom", "Block system call integration", "Stop Discord from registering the voice chat as a phone call"),
                 h(FormDivider),
+                toggle("keepMicInBackground", "Keep mic on in other apps", "Stop Discord from switching your mic off when you leave the app during a voice call"),
+                h(FormDivider),
                 toggle("callWhileSharing", "Allow it while screen sharing", "Starts the system call when you share. Only try this if stream audio is missing: it brings back call mode and call quality until you leave"),
             ),
             h(FormSection, { title: "Routing" },
@@ -821,6 +869,7 @@
     return {
         onLoad() {
             watchFlux();
+            watchAppState();
             hookTurboModuleRegistry();
             scan(false);
             // Some audio modules are only initialised once voice code runs; scan again shortly after.
