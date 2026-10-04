@@ -1,0 +1,14 @@
+{
+    "name": "Stream Quality",
+    "description": "Pick your own resolution and frame rate for screen sharing, including values Discord does not offer.",
+    "authors": [
+        {
+            "name": "mangotcdragon",
+            "id": "0"
+        }
+    ],
+    "main": "src/index.ts",
+    "vendetta": {
+        "icon": "ic_share_screen"
+    }
+}
