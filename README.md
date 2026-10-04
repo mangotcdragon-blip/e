@@ -11,17 +11,19 @@ Changes from upstream:
 
 ## Installing
 
-Paste a plugin URL into the Plugins page of your client:
+Paste a plugin URL into the Plugins page of your client. The trailing slash matters:
 
 ```
-https://mangotcdragon-blip.github.io/e/<PLUGIN_NAME>
+https://raw.githubusercontent.com/mangotcdragon-blip/e/gh-pages/<PLUGIN_NAME>/
 ```
 
-- [More Alts](https://mangotcdragon-blip.github.io/e/MoreAlts/) - use more than 5 alts and switch between them from the chat input. Also unlocks Discord's native multi-account switcher.
-- [Read All](https://mangotcdragon-blip.github.io/e/ReadAll/) - mark every server and DM notification as read with one button in the guild bar.
-- [Message Scheduler](https://mangotcdragon-blip.github.io/e/messageScheduler/) - schedule a message for a time or delay. Upstream notes this may count as self-botting. Use at your own risk.
-- [BetterNSFWGateBypass](https://mangotcdragon-blip.github.io/e/nsfwbypass/) - see `docs/nsfwbypass` upstream before using.
-- [Rick](https://mangotcdragon-blip.github.io/e/rick/)
+These are served straight from the `gh-pages` branch, which the deploy workflow updates on every push to `main`. If GitHub Pages is enabled for the repo, `https://mangotcdragon-blip.github.io/e/<PLUGIN_NAME>/` works too.
+
+- [More Alts](https://raw.githubusercontent.com/mangotcdragon-blip/e/gh-pages/MoreAlts/) - use more than 5 alts and switch between them from the chat input. Also unlocks Discord's native multi-account switcher.
+- [Read All](https://raw.githubusercontent.com/mangotcdragon-blip/e/gh-pages/ReadAll/) - mark every server and DM notification as read with one button in the guild bar.
+- [Message Scheduler](https://raw.githubusercontent.com/mangotcdragon-blip/e/gh-pages/messageScheduler/) - schedule a message for a time or delay. Upstream notes this may count as self-botting. Use at your own risk.
+- [BetterNSFWGateBypass](https://raw.githubusercontent.com/mangotcdragon-blip/e/gh-pages/nsfwbypass/) - see `docs/nsfwbypass` upstream before using.
+- [Rick](https://raw.githubusercontent.com/mangotcdragon-blip/e/gh-pages/rick/)
 
 Using any client mod is against Discord's Terms of Service.
 
