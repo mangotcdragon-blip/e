@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Compare
 import androidx.compose.material.icons.filled.FolderOpen
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.PhotoLibrary
@@ -69,6 +70,7 @@ fun EditorScreen(viewModel: EditorViewModel) {
     val snackbarHostState = remember { SnackbarHostState() }
     var openMenuExpanded by remember { mutableStateOf(false) }
     var showOriginal by remember { mutableStateOf(false) }
+    var showDecoderInfo by remember { mutableStateOf(false) }
 
     val pickMedia = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         uri?.let(viewModel::open)
@@ -98,6 +100,10 @@ fun EditorScreen(viewModel: EditorViewModel) {
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) { viewModel.player.pause() }
 
     val media = viewModel.media
+
+    if (showDecoderInfo) {
+        DecoderInfoDialog(onDismiss = { showDecoderInfo = false })
+    }
 
     if (media != null && viewModel.isFullscreen) {
         FullscreenPlayer(
@@ -141,6 +147,11 @@ fun EditorScreen(viewModel: EditorViewModel) {
                                 text = { Text("Browse files") },
                                 leadingIcon = { Icon(Icons.Filled.FolderOpen, contentDescription = null) },
                                 onClick = { openMenuExpanded = false; browseFiles() },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Supported video codecs") },
+                                leadingIcon = { Icon(Icons.Filled.Info, contentDescription = null) },
+                                onClick = { openMenuExpanded = false; showDecoderInfo = true },
                             )
                         }
                     }

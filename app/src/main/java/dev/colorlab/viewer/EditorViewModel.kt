@@ -16,6 +16,7 @@ import android.net.Uri
 import android.os.Build
 import android.provider.MediaStore
 import android.webkit.MimeTypeMap
+import androidx.annotation.OptIn
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -34,7 +35,11 @@ import androidx.media3.common.Player
 import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.Tracks
 import androidx.media3.common.VideoSize
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.mediacodec.MediaCodecRenderer
+import dev.colorlab.viewer.player.Codecs
 import dev.colorlab.viewer.color.ColorAdjustments
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -79,6 +84,7 @@ data class VideoState(
         get() = if (width > 0 && height > 0) width * pixelRatio / height else 16f / 9f
 }
 
+@OptIn(UnstableApi::class)
 class EditorViewModel(app: Application) : AndroidViewModel(app) {
 
     var media by mutableStateOf<LoadedMedia?>(null)
@@ -93,7 +99,12 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
     /** Cinema mode; kept here so it survives the rotation it invites. */
     var isFullscreen by mutableStateOf(false)
 
-    val player: ExoPlayer = ExoPlayer.Builder(app).build()
+    val player: ExoPlayer = ExoPlayer.Builder(
+        app,
+        // If the preferred (usually hardware) decoder refuses a stream, try the
+        // next one that claims the format, e.g. Android's software HEVC decoder.
+        DefaultRenderersFactory(app).setEnableDecoderFallback(true),
+    ).build()
 
     private val listener = object : Player.Listener {
         override fun onIsPlayingChanged(isPlaying: Boolean) {
@@ -119,10 +130,11 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
 
         override fun onTracksChanged(tracks: Tracks) {
             videoState = videoState.copy(audioTracks = describeAudioTracks(tracks))
+            unsupportedVideoMessage(tracks)?.let { message = it }
         }
 
         override fun onPlayerError(error: PlaybackException) {
-            message = "Couldn't play this video (${error.errorCodeName})"
+            message = describePlaybackError(error)
         }
     }
 
@@ -297,6 +309,42 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
             .setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, false)
             .setOverrideForType(TrackSelectionOverride(track.group.mediaTrackGroup, track.indexInGroup))
             .build()
+    }
+
+    /**
+     * ExoPlayer silently drops a video track no renderer can handle and plays
+     * audio over a black screen; say why instead.
+     */
+    private fun unsupportedVideoMessage(tracks: Tracks): String? {
+        val videoGroups = tracks.groups.filter { it.type == C.TRACK_TYPE_VIDEO }
+        if (videoGroups.isEmpty()) return null
+        val anySupported = videoGroups.any { group -> (0 until group.length).any { group.isTrackSupported(it) } }
+        if (anySupported) return null
+        val format = videoGroups.first().getTrackFormat(0)
+        val size = if (format.width > 0 && format.height > 0) " at ${format.width}x${format.height}" else ""
+        return "This device can't decode ${Codecs.friendlyName(format.sampleMimeType)}$size"
+    }
+
+    private fun describePlaybackError(error: PlaybackException): String {
+        val cause = error.cause
+        if (cause is MediaCodecRenderer.DecoderInitializationException) {
+            val codec = Codecs.friendlyName(cause.mimeType)
+            val info = cause.codecInfo
+            return if (info == null) {
+                "This device has no decoder for $codec"
+            } else {
+                "The $codec decoder (${info.name}) failed to start"
+            }
+        }
+        return when (error.errorCode) {
+            PlaybackException.ERROR_CODE_DECODING_FORMAT_UNSUPPORTED -> "This device can't decode this video's format"
+            PlaybackException.ERROR_CODE_DECODING_FORMAT_EXCEEDS_CAPABILITIES -> "This video is too large or too fast for this device's decoder"
+            PlaybackException.ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED -> "Unsupported file container"
+            PlaybackException.ERROR_CODE_PARSING_CONTAINER_MALFORMED -> "The file looks damaged"
+            PlaybackException.ERROR_CODE_IO_FILE_NOT_FOUND -> "File not found"
+            PlaybackException.ERROR_CODE_IO_NO_PERMISSION -> "No permission to read this file"
+            else -> "Couldn't play this video (${error.errorCodeName})"
+        }
     }
 
     private fun describeAudioTracks(tracks: Tracks): List<AudioTrack> {

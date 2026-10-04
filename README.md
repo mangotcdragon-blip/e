@@ -38,6 +38,16 @@ press back or the exit button to leave.
 **Save**: edited images are written as JPEG to `Pictures/ColorLab`. Video export
 is not included; the video effects are for live viewing only.
 
+## Codec support
+
+Video decoding is done by the phone's own MediaCodec decoders through Media3
+ExoPlayer, so the app plays whatever the device can play: H.264, H.265/HEVC,
+VP9, AV1 and so on, in MP4, MKV, WebM, MOV, TS and the other containers
+ExoPlayer parses. Decoder fallback is enabled, so if the hardware decoder
+refuses a stream the app retries with the device's software decoder. The
+"Supported video codecs" entry in the open menu lists exactly which decoders
+the current phone has. Playback failures name the codec that is missing.
+
 ## How it works
 
 All colour settings compile down to a single 4x5 colour matrix
