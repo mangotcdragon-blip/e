@@ -152,20 +152,26 @@ private fun AudioTrackMenu(
             Icon(
                 imageVector = Icons.Filled.Audiotrack,
                 contentDescription = "Audio track",
-                tint = if (tracks.size > 1) MaterialTheme.colorScheme.primary else Color.Unspecified,
+                tint = if (tracks.count { it.supported } > 1) MaterialTheme.colorScheme.primary else Color.Unspecified,
             )
         }
         DropdownMenu(expanded = expanded, onDismissRequest = { setExpanded(false) }) {
             tracks.forEach { track ->
+                val detail = when {
+                    !track.supported && track.detail.isNotEmpty() -> "${track.detail} \u00B7 no decoder"
+                    !track.supported -> "No decoder on this device"
+                    else -> track.detail
+                }
                 DropdownMenuItem(
+                    enabled = track.supported,
                     text = {
                         Column {
                             Text(track.label)
-                            if (track.detail.isNotEmpty()) {
+                            if (detail.isNotEmpty()) {
                                 Text(
-                                    text = track.detail,
+                                    text = detail,
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    color = if (track.supported) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error,
                                 )
                             }
                         }

@@ -63,6 +63,8 @@ data class AudioTrack(
     val label: String,
     val detail: String,
     val selected: Boolean,
+    /** False when no decoder on this device (or bundled with the app) handles it. */
+    val supported: Boolean,
     internal val group: Tracks.Group,
     internal val indexInGroup: Int,
 )
@@ -101,9 +103,13 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
 
     val player: ExoPlayer = ExoPlayer.Builder(
         app,
-        // If the preferred (usually hardware) decoder refuses a stream, try the
-        // next one that claims the format, e.g. Android's software HEVC decoder.
-        DefaultRenderersFactory(app).setEnableDecoderFallback(true),
+        DefaultRenderersFactory(app)
+            // If the preferred (usually hardware) decoder refuses a stream, try the
+            // next one that claims the format, e.g. Android's software HEVC decoder.
+            .setEnableDecoderFallback(true)
+            // Use the bundled FFmpeg audio decoder for formats the device lacks a
+            // decoder for; phones rarely ship AC-3, E-AC-3, DTS or TrueHD decoders.
+            .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON),
     ).build()
 
     private val listener = object : Player.Listener {
@@ -129,8 +135,11 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
         }
 
         override fun onTracksChanged(tracks: Tracks) {
-            videoState = videoState.copy(audioTracks = describeAudioTracks(tracks))
-            unsupportedVideoMessage(tracks)?.let { message = it }
+            val audioTracks = describeAudioTracks(tracks)
+            videoState = videoState.copy(audioTracks = audioTracks)
+            val unsupported = unsupportedVideoMessage(tracks)
+                ?: unsupportedAudioMessage(audioTracks)
+            unsupported?.let { message = it }
         }
 
         override fun onPlayerError(error: PlaybackException) {
@@ -325,6 +334,12 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
         return "This device can't decode ${Codecs.friendlyName(format.sampleMimeType)}$size"
     }
 
+    private fun unsupportedAudioMessage(audioTracks: List<AudioTrack>): String? {
+        if (audioTracks.isEmpty() || audioTracks.any { it.supported }) return null
+        val first = audioTracks.first()
+        return "No decoder for this video's ${first.detail.ifEmpty { "audio" }} track, so it plays silently"
+    }
+
     private fun describePlaybackError(error: PlaybackException): String {
         val cause = error.cause
         if (cause is MediaCodecRenderer.DecoderInitializationException) {
@@ -352,12 +367,12 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
         for (group in tracks.groups) {
             if (group.type != C.TRACK_TYPE_AUDIO) continue
             for (i in 0 until group.length) {
-                if (!group.isTrackSupported(i)) continue
                 val format = group.getTrackFormat(i)
                 result += AudioTrack(
                     label = audioLabel(format, result.size + 1),
                     detail = audioDetail(format),
                     selected = group.isTrackSelected(i),
+                    supported = group.isTrackSupported(i),
                     group = group,
                     indexInGroup = i,
                 )

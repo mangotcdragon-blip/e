@@ -48,6 +48,13 @@ refuses a stream the app retries with the device's software decoder. The
 "Supported video codecs" entry in the open menu lists exactly which decoders
 the current phone has. Playback failures name the codec that is missing.
 
+Audio is different: phones rarely ship decoders for the surround formats used
+in movie files (AC-3 / Dolby Digital, E-AC-3, DTS, TrueHD), so the app bundles
+Media3's FFmpeg audio extension (the prebuilt `org.jellyfin.media3`
+artifact). Those tracks decode in software and are downmixed to the phone's
+speakers or headphones. A track nothing can decode is listed greyed out in
+the audio menu with "no decoder".
+
 ## How it works
 
 All colour settings compile down to a single 4x5 colour matrix
