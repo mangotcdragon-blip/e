@@ -1,10 +1,17 @@
 # Stream Quality
 
-Pick your own resolution and frame rate for screen sharing on Discord mobile, including values the app does not offer in its quality picker.
+Pick your own resolution and frame rate for screen sharing on Discord mobile, straight from Discord's own share sheet.
 
-## What it does
+## How it works
 
-When you start sharing your screen, Discord builds a Go Live request with a `qualityOptions` object (`preset`, `resolution`, `frameRate`). This plugin rewrites that object with your numbers, and optionally also forces them at the encoder boundary (`Connection.setDesktopEncodingOptions`) so a quality preset or clamp further down cannot undo them.
+Discord's mobile share sheet offers three fixed rows: Default (720p 30), Performance (480p 30) and High quality (1080p 60, Nitro only). This plugin takes over one of those rows (High quality by default) and turns it into **Custom quality** with the numbers you set in the plugin settings:
+
+- The row's label and sub label show your values, for example `1080x2400 @ 90 fps`.
+- The row is always selectable, with or without Nitro.
+- Tapping it stores your values in Discord's stream settings, so Start, re-shares and the live quality indicator all use them.
+- The Go Live request handed to the media engine is rewritten as a backstop, and optionally the encoder options too.
+
+The other two rows keep working exactly as before, so you can switch between stock and custom quality from the sheet.
 
 ## Settings
 
@@ -12,11 +19,13 @@ When you start sharing your screen, Discord builds a Go Live request with a `qua
 - **Resolution**: 480p, 720p, 1080p, 1440p, 2160p or *Custom* (type any short-side size between 144 and 4320 px). The long side follows your screen's aspect ratio, so a portrait phone gets a portrait stream.
 - **Frame rate**: 15 to 120 fps presets or *Custom* (1 to 240).
 - **Exact dimensions**: set width and height yourself instead of deriving them from the screen.
-- **Advanced**: toggle the encoder patch, the custom-preset flag, the settings-store override and debug logging.
+- **Share sheet row to replace**: High quality, Performance or Default.
+- **Only when that row is selected**: on by default. Turn it off to force the custom quality for every share regardless of which row is picked.
+- **Advanced**: encoder patch and debug logging.
 
-Resolution and frame rate take effect the next time you start a share. The advanced switches need a plugin reload.
+Resolution and frame rate apply the next time you start a share. Changing the replaced row or the encoder switch needs a plugin reload.
 
 ## Caveats
 
 - Discord's servers and the viewer's client still decide what they accept. Very high values may be downscaled on the receiving end or cost a lot of upload bandwidth and battery.
-- The patched module names come from the current Discord mobile builds and may move. If the plugin shows a "Go Live module not found" toast after an update, turn on debug logging and open an issue with the console output.
+- The patched modules (`AudioActionCreators.setGoLiveSource`, `getStreamSettingsForPreset`, `canStreamWithSettings`, `MobileGoLiveActionSheet`) were taken from the current Discord Android bundle and may move in a future update. If the plugin shows a toast about a missing module after an update, turn on debug logging and open an issue with the console output.

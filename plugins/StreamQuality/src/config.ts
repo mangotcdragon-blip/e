@@ -1,8 +1,42 @@
 import { ReactNative as RN } from "@vendetta/metro/common";
+import { findByProps } from "@vendetta/metro";
 import { storage } from "@vendetta/plugin";
 
-/** Discord's "custom" stream preset. 1 = clear video, 2 = smooth video, 3 = custom. */
-export const CUSTOM_PRESET = 3;
+/**
+ * Discord's mobile stream presets (modules/go_live/StreamSettingsConstants).
+ * Looked up at runtime; these numbers are the fallback if the lookup fails.
+ */
+const PRESET_FALLBACK = {
+    PRESET_MOBILE_DEFAULT: 5,
+    PRESET_MOBILE_PERFORMANCE: 6,
+    PRESET_MOBILE_HIGH_QUALITY: 7,
+};
+
+export type PresetKey = keyof typeof PRESET_FALLBACK;
+
+export function getPresets(): Record<PresetKey, number> {
+    const mod = findByProps("ApplicationStreamPresets", "ApplicationStreamResolutions");
+    const live = mod?.ApplicationStreamPresets ?? {};
+    return {
+        PRESET_MOBILE_DEFAULT: live.PRESET_MOBILE_DEFAULT ?? PRESET_FALLBACK.PRESET_MOBILE_DEFAULT,
+        PRESET_MOBILE_PERFORMANCE: live.PRESET_MOBILE_PERFORMANCE ?? PRESET_FALLBACK.PRESET_MOBILE_PERFORMANCE,
+        PRESET_MOBILE_HIGH_QUALITY: live.PRESET_MOBILE_HIGH_QUALITY ?? PRESET_FALLBACK.PRESET_MOBILE_HIGH_QUALITY,
+    };
+}
+
+export const PRESET_LABELS: Record<PresetKey, string> = {
+    PRESET_MOBILE_HIGH_QUALITY: "High quality",
+    PRESET_MOBILE_PERFORMANCE: "Performance",
+    PRESET_MOBILE_DEFAULT: "Default",
+};
+
+/** Numeric id of the share-sheet row the plugin takes over. */
+export function getTargetPreset(): number {
+    const key = (storage.targetPreset as PresetKey) in PRESET_FALLBACK
+        ? (storage.targetPreset as PresetKey)
+        : "PRESET_MOBILE_HIGH_QUALITY";
+    return getPresets()[key];
+}
 
 export const RESOLUTION_PRESETS = [480, 720, 1080, 1440, 2160];
 export const FPS_PRESETS = [15, 24, 30, 60, 90, 120];
@@ -24,12 +58,12 @@ export const DEFAULTS = {
     useExactSize: false,
     width: 1080,
     height: 2400,
-    /** Tag the stream with Discord's "custom" preset so presets don't override the numbers. */
-    customPreset: true,
+    /** Which row of Discord's share sheet becomes the custom row. */
+    targetPreset: "PRESET_MOBILE_HIGH_QUALITY" as PresetKey,
+    /** Only apply the custom values when that row is selected; off forces them for every share. */
+    onlyWhenSelected: true,
     /** Also force the numbers at the encoder level (Connection.setDesktopEncodingOptions). */
     patchEncoder: true,
-    /** Also make ApplicationStreamingSettingsStore report the custom values. */
-    patchStore: false,
     /** Log every patched call with its arguments to the debug console. */
     debug: false,
 };
@@ -40,6 +74,9 @@ export function initStorage() {
             storage[key] = (DEFAULTS as any)[key];
         }
     }
+    // Settings from the first release that no longer exist.
+    delete storage.patchStore;
+    delete storage.customPreset;
 }
 
 export function clamp(value: number, min: number, max: number) {
@@ -65,6 +102,21 @@ export interface StreamTarget {
     height: number;
 }
 
+function screenInfo() {
+    try {
+        const screen = RN.Dimensions.get("screen");
+        if (screen.width > 0 && screen.height > 0) {
+            return {
+                aspect: Math.min(screen.width, screen.height) / Math.max(screen.width, screen.height),
+                portrait: screen.height >= screen.width,
+            };
+        }
+    } catch {
+        // Dimensions unavailable; fall through to the typical-phone fallback.
+    }
+    return { aspect: 9 / 16, portrait: true };
+}
+
 /**
  * Work out what we want the stream to be. If exact dimensions are off, the
  * screen's aspect ratio is used so a portrait phone gets a portrait stream.
@@ -83,27 +135,9 @@ export function getTarget(): StreamTarget {
         LIMITS.resolution.min,
         LIMITS.resolution.max
     );
-
-    let aspect = 9 / 16; // short / long, fallback for a typical phone
-    try {
-        const screen = RN.Dimensions.get("screen");
-        const short = Math.min(screen.width, screen.height);
-        const long = Math.max(screen.width, screen.height);
-        if (short > 0 && long > 0) aspect = short / long;
-    } catch {
-        // Dimensions unavailable; keep the fallback.
-    }
-
+    const { aspect, portrait } = screenInfo();
     const shortSide = even(resolution);
     const longSide = even(resolution / aspect);
-
-    let portrait = true;
-    try {
-        const screen = RN.Dimensions.get("screen");
-        portrait = screen.height >= screen.width;
-    } catch {
-        // keep portrait
-    }
 
     return portrait
         ? { resolution: shortSide, fps, width: shortSide, height: longSide }

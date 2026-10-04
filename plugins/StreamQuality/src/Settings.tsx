@@ -8,13 +8,14 @@ import {
     DEFAULTS,
     FPS_PRESETS,
     LIMITS,
+    PRESET_LABELS,
     RESOLUTION_PRESETS,
-    clamp,
     describeTarget,
     getTarget,
     initStorage,
     parseNumber,
 } from "./config";
+import { syncStore } from "./index";
 
 // Discord's current design-system components. Looked up once at module load so
 // a missing export fails at settings-open time instead of at plugin load.
@@ -64,6 +65,7 @@ function NumberField(props: {
         }
         setError(null);
         storage[field] = n;
+        syncStore();
     };
 
     const Input = DSTextInput ?? RN.TextInput;
@@ -129,6 +131,7 @@ function PresetPicker(props: {
         }
         setCustomOpen(false);
         storage[field] = Number(value);
+        syncStore();
     };
 
     const rows = [
@@ -156,6 +159,46 @@ function PresetPicker(props: {
                     onPress={() => choose(row.value)}
                     trailing={
                         selected === row.value ? (
+                            <RN.Image
+                                source={getAssetIDByName("CheckmarkSmallIcon") || getAssetIDByName("Check")}
+                                style={{ width: 20, height: 20, tintColor: "#23a55a" }}
+                            />
+                        ) : null
+                    }
+                />
+            ))}
+        </TableRowGroup>
+    );
+}
+
+/** Which of Discord's three share-sheet rows becomes the custom row. */
+function SheetRowPicker() {
+    const keys = Object.keys(PRESET_LABELS) as Array<keyof typeof PRESET_LABELS>;
+    const current = (storage.targetPreset as string) in PRESET_LABELS ? storage.targetPreset : keys[0];
+    const choose = (value: string) => {
+        storage.targetPreset = value;
+        syncStore();
+    };
+    const title = "Share sheet row to replace";
+
+    if (TableRadioGroup && TableRadioRow) {
+        return (
+            <TableRadioGroup title={title} value={current} onChange={choose}>
+                {keys.map((k) => (
+                    <TableRadioRow key={k} label={PRESET_LABELS[k]} value={k} />
+                ))}
+            </TableRadioGroup>
+        );
+    }
+    return (
+        <TableRowGroup title={title}>
+            {keys.map((k) => (
+                <TableRow
+                    key={k}
+                    label={PRESET_LABELS[k]}
+                    onPress={() => choose(k)}
+                    trailing={
+                        current === k ? (
                             <RN.Image
                                 source={getAssetIDByName("CheckmarkSmallIcon") || getAssetIDByName("Check")}
                                 style={{ width: 20, height: 20, tintColor: "#23a55a" }}
@@ -201,7 +244,7 @@ export default function Settings() {
                     />
                     <TableRow
                         label="Current target"
-                        subLabel={`${describeTarget(target)}. Takes effect the next time you start sharing.`}
+                        subLabel={`${describeTarget(target)}. Pick the "${PRESET_LABELS[storage.targetPreset as keyof typeof PRESET_LABELS] ?? "High quality"}" row in Discord's share sheet to use it.`}
                     />
                 </TableRowGroup>
 
@@ -246,7 +289,10 @@ export default function Settings() {
                         label="Set width and height myself"
                         subLabel="Ignore the resolution above and the screen's aspect ratio"
                         value={!!storage.useExactSize}
-                        onValueChange={(v: boolean) => (storage.useExactSize = v)}
+                        onValueChange={(v: boolean) => {
+                            storage.useExactSize = v;
+                            syncStore();
+                        }}
                     />
                 </TableRowGroup>
                 {storage.useExactSize && (
@@ -268,24 +314,23 @@ export default function Settings() {
                     </Wrap>
                 )}
 
+                <SheetRowPicker />
+
+                <TableRowGroup title="Share sheet">
+                    <TableSwitchRow
+                        label="Only when that row is selected"
+                        subLabel="Off: force the custom quality for every share, whichever row is picked"
+                        value={!!storage.onlyWhenSelected}
+                        onValueChange={(v: boolean) => (storage.onlyWhenSelected = v)}
+                    />
+                </TableRowGroup>
+
                 <TableRowGroup title="Advanced">
                     <TableSwitchRow
                         label="Force encoder options"
                         subLabel="Also rewrite the numbers right before they reach the video encoder"
                         value={!!storage.patchEncoder}
                         onValueChange={(v: boolean) => (storage.patchEncoder = v)}
-                    />
-                    <TableSwitchRow
-                        label="Custom preset flag"
-                        subLabel="Tell Discord the stream uses a custom preset so a quality preset can't override it"
-                        value={!!storage.customPreset}
-                        onValueChange={(v: boolean) => (storage.customPreset = v)}
-                    />
-                    <TableSwitchRow
-                        label="Override stream settings store"
-                        subLabel="Try this if the quality doesn't change. Discord's own quality picker may show odd values."
-                        value={!!storage.patchStore}
-                        onValueChange={(v: boolean) => (storage.patchStore = v)}
                     />
                     <TableSwitchRow
                         label="Debug logging"
@@ -295,7 +340,7 @@ export default function Settings() {
                     />
                     <TableRow
                         label="Note"
-                        subLabel="Encoder, store and preset switches apply after the plugin is reloaded. Resolution and frame rate apply on the next share."
+                        subLabel="The share-sheet row choice and the encoder switch apply after the plugin is reloaded. Resolution and frame rate apply on the next share."
                     />
                 </TableRowGroup>
             </Wrap>
