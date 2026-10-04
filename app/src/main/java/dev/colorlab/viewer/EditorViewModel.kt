@@ -25,9 +25,14 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.exifinterface.media.ExifInterface
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.media3.common.C
+import androidx.media3.common.Format
 import androidx.media3.common.MediaItem
+import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.common.TrackSelectionOverride
+import androidx.media3.common.Tracks
 import androidx.media3.common.VideoSize
 import androidx.media3.exoplayer.ExoPlayer
 import dev.colorlab.viewer.color.ColorAdjustments
@@ -48,6 +53,15 @@ sealed interface LoadedMedia {
     data class Video(override val uri: Uri) : LoadedMedia
 }
 
+/** One selectable audio stream inside the current video. */
+data class AudioTrack(
+    val label: String,
+    val detail: String,
+    val selected: Boolean,
+    internal val group: Tracks.Group,
+    internal val indexInGroup: Int,
+)
+
 data class VideoState(
     val isPlaying: Boolean = false,
     val isBuffering: Boolean = false,
@@ -59,6 +73,7 @@ data class VideoState(
     val loop: Boolean = true,
     val muted: Boolean = false,
     val speed: Float = 1f,
+    val audioTracks: List<AudioTrack> = emptyList(),
 ) {
     val aspectRatio: Float
         get() = if (width > 0 && height > 0) width * pixelRatio / height else 16f / 9f
@@ -100,6 +115,10 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
                     pixelRatio = videoSize.pixelWidthHeightRatio,
                 )
             }
+        }
+
+        override fun onTracksChanged(tracks: Tracks) {
+            videoState = videoState.copy(audioTracks = describeAudioTracks(tracks))
         }
 
         override fun onPlayerError(error: PlaybackException) {
@@ -150,6 +169,10 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
     private fun openVideo(uri: Uri) {
         media = LoadedMedia.Video(uri)
         videoState = VideoState(loop = videoState.loop, muted = videoState.muted, speed = videoState.speed)
+        // Forget any audio track chosen for the previous file.
+        player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
+            .clearOverridesOfType(C.TRACK_TYPE_AUDIO)
+            .build()
         player.setMediaItem(MediaItem.fromUri(uri))
         player.prepare()
         player.playWhenReady = true
@@ -267,6 +290,71 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
     fun setSpeed(speed: Float) {
         player.setPlaybackSpeed(speed)
         videoState = videoState.copy(speed = speed)
+    }
+
+    fun selectAudioTrack(track: AudioTrack) {
+        player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
+            .setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, false)
+            .setOverrideForType(TrackSelectionOverride(track.group.mediaTrackGroup, track.indexInGroup))
+            .build()
+    }
+
+    private fun describeAudioTracks(tracks: Tracks): List<AudioTrack> {
+        val result = mutableListOf<AudioTrack>()
+        for (group in tracks.groups) {
+            if (group.type != C.TRACK_TYPE_AUDIO) continue
+            for (i in 0 until group.length) {
+                if (!group.isTrackSupported(i)) continue
+                val format = group.getTrackFormat(i)
+                result += AudioTrack(
+                    label = audioLabel(format, result.size + 1),
+                    detail = audioDetail(format),
+                    selected = group.isTrackSelected(i),
+                    group = group,
+                    indexInGroup = i,
+                )
+            }
+        }
+        return result
+    }
+
+    private fun audioLabel(format: Format, ordinal: Int): String {
+        format.label?.takeIf { it.isNotBlank() }?.let { return it }
+        val language = format.language
+        if (!language.isNullOrBlank() && language != C.LANGUAGE_UNDETERMINED) {
+            val display = Locale.forLanguageTag(language).getDisplayLanguage(Locale.getDefault())
+            if (display.isNotBlank() && display != language) return display
+            return language.uppercase(Locale.ROOT)
+        }
+        return "Audio $ordinal"
+    }
+
+    private fun audioDetail(format: Format): String {
+        val codec = when (format.sampleMimeType) {
+            MimeTypes.AUDIO_AAC -> "AAC"
+            MimeTypes.AUDIO_AC3 -> "AC-3"
+            MimeTypes.AUDIO_E_AC3, MimeTypes.AUDIO_E_AC3_JOC -> "E-AC-3"
+            MimeTypes.AUDIO_AC4 -> "AC-4"
+            MimeTypes.AUDIO_DTS -> "DTS"
+            MimeTypes.AUDIO_DTS_HD, MimeTypes.AUDIO_DTS_EXPRESS -> "DTS-HD"
+            MimeTypes.AUDIO_TRUEHD -> "TrueHD"
+            MimeTypes.AUDIO_MPEG -> "MP3"
+            MimeTypes.AUDIO_OPUS -> "Opus"
+            MimeTypes.AUDIO_VORBIS -> "Vorbis"
+            MimeTypes.AUDIO_FLAC -> "FLAC"
+            MimeTypes.AUDIO_ALAC -> "ALAC"
+            MimeTypes.AUDIO_RAW -> "PCM"
+            else -> format.sampleMimeType?.substringAfter('/')?.uppercase(Locale.ROOT)
+        }
+        val channels = when (format.channelCount) {
+            Format.NO_VALUE, 0 -> null
+            1 -> "Mono"
+            2 -> "Stereo"
+            6 -> "5.1"
+            8 -> "7.1"
+            else -> "${format.channelCount} ch"
+        }
+        return listOfNotNull(codec, channels).joinToString(" \u00B7 ")
     }
 
     // ---- Export ------------------------------------------------------------

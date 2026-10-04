@@ -62,6 +62,7 @@ fun FullscreenPlayer(
 ) {
     var controlsVisible by remember { mutableStateOf(true) }
     var showOriginal by remember { mutableStateOf(false) }
+    var menuOpen by remember { mutableStateOf(false) }
     val isPlaying = viewModel.videoState.isPlaying
     val effective = if (showOriginal) ColorAdjustments.Default else viewModel.adjustments
 
@@ -69,8 +70,8 @@ fun FullscreenPlayer(
     ImmersiveModeEffect()
 
     // Auto-hide the controls while a video is playing.
-    LaunchedEffect(controlsVisible, isPlaying, viewModel.videoState.speed) {
-        if (controlsVisible && isPlaying) {
+    LaunchedEffect(controlsVisible, isPlaying, menuOpen, viewModel.videoState.speed) {
+        if (controlsVisible && isPlaying && !menuOpen) {
             delay(CONTROLS_HIDE_DELAY_MS)
             controlsVisible = false
         }
@@ -145,7 +146,9 @@ fun FullscreenPlayer(
                             onLoopChange = viewModel::setLoop,
                             onMuteChange = viewModel::setMuted,
                             onSpeedChange = viewModel::setSpeed,
+                            onAudioTrackSelect = viewModel::selectAudioTrack,
                             modifier = Modifier.fillMaxWidth(),
+                            onMenuOpenChange = { menuOpen = it },
                         )
                     }
                 }

@@ -22,7 +22,9 @@ channel gains.
 Neon, Dreamy, Negative. Pick one, then fine-tune.
 
 **Video playback**: play/pause, scrub bar, 5 second skip, loop, mute, speed
-from 0.25x to 2x.
+from 0.25x to 2x, and an audio track menu for files with several audio
+streams (languages, commentary, stereo vs surround). Each entry shows the
+track name or language plus its codec and channel layout.
 
 **Fullscreen / cinema mode**: tap the fullscreen button to hide everything but
 the media. The system bars disappear, the screen stays awake, and the phone

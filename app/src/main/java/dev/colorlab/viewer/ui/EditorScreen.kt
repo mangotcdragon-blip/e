@@ -229,6 +229,7 @@ private fun EditorContent(
                         onLoopChange = viewModel::setLoop,
                         onMuteChange = viewModel::setMuted,
                         onSpeedChange = viewModel::setSpeed,
+                        onAudioTrackSelect = viewModel::selectAudioTrack,
                         modifier = Modifier.fillMaxWidth(),
                     )
                 }
