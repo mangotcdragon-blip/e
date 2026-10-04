@@ -56,8 +56,10 @@ export const DEFAULTS = {
     fps: 60,
     /** When true, width/height below are used verbatim instead of deriving them from the screen. */
     useExactSize: false,
-    width: 1080,
-    height: 2400,
+    width: 2400,
+    height: 1080,
+    /** Report and send dimensions short side first (1080x2400) instead of long side first (2400x1080). */
+    portraitDims: false,
     /** Which row of Discord's share sheet becomes the custom row. */
     targetPreset: "PRESET_MOBILE_HIGH_QUALITY" as PresetKey,
     /** Only apply the custom values when that row is selected; off forces them for every share. */
@@ -97,39 +99,65 @@ export function parseNumber(text: string): number | null {
 }
 
 export interface StreamTarget {
-    /** Value handed to Discord's qualityOptions.resolution (short side in px). */
+    /** Value handed to Discord's qualityOptions.resolution: the "p" number, i.e. the short side in px. */
     resolution: number;
     fps: number;
+    /** Long side first (2400x1080) unless portraitDims is on. */
     width: number;
     height: number;
 }
 
-function screenInfo() {
+export interface ScreenInfo {
+    /** Physical pixels of the panel, long side and short side. */
+    longPx: number;
+    shortPx: number;
+    scale: number;
+    /** False when the size had to be guessed. */
+    detected: boolean;
+}
+
+/**
+ * Physical panel size. RN reports the screen in density-independent points,
+ * so multiply by the pixel ratio to get back to real pixels (412x915 points
+ * at 2.625 is a 1080x2400 panel).
+ */
+export function getScreenInfo(): ScreenInfo {
     try {
         const screen = RN.Dimensions.get("screen");
-        if (screen.width > 0 && screen.height > 0) {
+        const scale = RN.PixelRatio.get() || 1;
+        const w = screen.width * scale;
+        const h = screen.height * scale;
+        if (w > 0 && h > 0) {
             return {
-                aspect: Math.min(screen.width, screen.height) / Math.max(screen.width, screen.height),
-                portrait: screen.height >= screen.width,
+                longPx: Math.round(Math.max(w, h)),
+                shortPx: Math.round(Math.min(w, h)),
+                scale,
+                detected: true,
             };
         }
     } catch {
         // Dimensions unavailable; fall through to the typical-phone fallback.
     }
-    return { aspect: 9 / 16, portrait: true };
+    return { longPx: 2400, shortPx: 1080, scale: 1, detected: false };
+}
+
+function orient(long: number, short: number) {
+    return storage.portraitDims ? { width: short, height: long } : { width: long, height: short };
 }
 
 /**
- * Work out what we want the stream to be. If exact dimensions are off, the
- * screen's aspect ratio is used so a portrait phone gets a portrait stream.
+ * Work out what we want the stream to be. The "p" number is the short side;
+ * the long side follows the panel's real pixel ratio, so 1080p on a
+ * 2400x1080 panel is 2400x1080 and on a 2780x1264 panel is 2376x1080.
  */
 export function getTarget(): StreamTarget {
     const fps = clamp(Number(storage.fps) || DEFAULTS.fps, LIMITS.fps.min, LIMITS.fps.max);
 
     if (storage.useExactSize) {
-        const width = even(clamp(Number(storage.width) || DEFAULTS.width, LIMITS.side.min, LIMITS.side.max));
-        const height = even(clamp(Number(storage.height) || DEFAULTS.height, LIMITS.side.min, LIMITS.side.max));
-        return { resolution: Math.min(width, height), fps, width, height };
+        const a = even(clamp(Number(storage.width) || DEFAULTS.width, LIMITS.side.min, LIMITS.side.max));
+        const b = even(clamp(Number(storage.height) || DEFAULTS.height, LIMITS.side.min, LIMITS.side.max));
+        // Whatever order the user typed, resolution is the short side.
+        return { resolution: Math.min(a, b), fps, width: a, height: b };
     }
 
     const resolution = clamp(
@@ -137,13 +165,11 @@ export function getTarget(): StreamTarget {
         LIMITS.resolution.min,
         LIMITS.resolution.max
     );
-    const { aspect, portrait } = screenInfo();
+    const screen = getScreenInfo();
     const shortSide = even(resolution);
-    const longSide = even(resolution / aspect);
+    const longSide = even((resolution * screen.longPx) / screen.shortPx);
 
-    return portrait
-        ? { resolution: shortSide, fps, width: shortSide, height: longSide }
-        : { resolution: shortSide, fps, width: longSide, height: shortSide };
+    return { resolution: shortSide, fps, ...orient(longSide, shortSide) };
 }
 
 export function describeTarget(t: StreamTarget = getTarget()) {

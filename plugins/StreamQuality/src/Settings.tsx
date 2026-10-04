@@ -11,6 +11,7 @@ import {
     PRESET_LABELS,
     RESOLUTION_PRESETS,
     describeTarget,
+    getScreenInfo,
     getTarget,
     parseNumber,
 } from "./config";
@@ -228,6 +229,7 @@ export default function Settings() {
     }
 
     const target = getTarget();
+    const screen = getScreenInfo();
     const Wrap = Stack ?? RN.View;
 
     return (
@@ -243,6 +245,14 @@ export default function Settings() {
                     <TableRow
                         label="Current target"
                         subLabel={`${describeTarget(target)}. Pick the "${PRESET_LABELS[storage.targetPreset as keyof typeof PRESET_LABELS] ?? "High quality"}" row in Discord's share sheet to use it.`}
+                    />
+                    <TableRow
+                        label="Detected screen"
+                        subLabel={
+                            screen.detected
+                                ? `${screen.longPx}x${screen.shortPx} px (pixel ratio ${Number(screen.scale.toFixed(3))}). The long side of each preset follows this ratio.`
+                                : "Could not read the screen size, assuming 2400x1080."
+                        }
                     />
                 </TableRowGroup>
 
@@ -282,10 +292,16 @@ export default function Settings() {
                     />
                 )}
 
-                <TableRowGroup title="Exact dimensions">
+                <TableRowGroup title="Dimensions">
+                    <TableSwitchRow
+                        label="Short side first"
+                        subLabel="Show and send sizes as 1080x2400 instead of 2400x1080"
+                        value={!!storage.portraitDims}
+                        onValueChange={(v: boolean) => (storage.portraitDims = v)}
+                    />
                     <TableSwitchRow
                         label="Set width and height myself"
-                        subLabel="Ignore the resolution above and the screen's aspect ratio"
+                        subLabel="Ignore the resolution above and the screen's ratio"
                         value={!!storage.useExactSize}
                         onValueChange={(v: boolean) => {
                             storage.useExactSize = v;

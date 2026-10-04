@@ -16,7 +16,8 @@ The other two rows keep working exactly as before, so you can switch between sto
 ## Settings
 
 - **Override screen share quality**: master switch.
-- **Resolution**: 480p, 720p, 1080p, 1440p, 2160p or *Custom* (type any short-side size between 144 and 4320 px). The long side follows your screen's aspect ratio, so a portrait phone gets a portrait stream.
+- **Resolution**: 480p, 720p, 1080p, 1440p, 2160p or *Custom* (any value between 144 and 4320). The "p" number is the short side; the long side follows your panel's real pixel ratio, read through the device pixel ratio. On a 2400x1080 panel 1080p is 2400x1080, on a 2780x1264 panel it is 2376x1080. The settings page shows the detected panel size.
+- **Short side first**: show and send sizes as 1080x2400 instead of 2400x1080.
 - **Frame rate**: 15 to 120 fps presets or *Custom* (1 to 240).
 - **Exact dimensions**: set width and height yourself instead of deriving them from the screen.
 - **Share sheet row to replace**: High quality, Performance or Default.
