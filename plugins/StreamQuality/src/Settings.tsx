@@ -12,7 +12,6 @@ import {
     RESOLUTION_PRESETS,
     describeTarget,
     getTarget,
-    initStorage,
     parseNumber,
 } from "./config";
 import { syncStore } from "./index";
@@ -213,7 +212,6 @@ function SheetRowPicker() {
 
 export default function Settings() {
     useProxy(storage);
-    initStorage();
 
     const [resCustom, setResCustom] = React.useState(!RESOLUTION_PRESETS.includes(Number(storage.resolution)));
     const [fpsCustom, setFpsCustom] = React.useState(!FPS_PRESETS.includes(Number(storage.fps)));

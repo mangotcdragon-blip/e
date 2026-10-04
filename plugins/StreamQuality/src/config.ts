@@ -74,9 +74,11 @@ export function initStorage() {
             storage[key] = (DEFAULTS as any)[key];
         }
     }
-    // Settings from the first release that no longer exist.
-    delete storage.patchStore;
-    delete storage.customPreset;
+    // Settings from the first release that no longer exist. Only delete when
+    // present: every delete on the storage proxy emits a change event.
+    for (const stale of ["patchStore", "customPreset"]) {
+        if (stale in storage) delete storage[stale];
+    }
 }
 
 export function clamp(value: number, min: number, max: number) {
