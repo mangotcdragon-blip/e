@@ -26,6 +26,9 @@ PORT="$work/port" "$UTMT_CLI" load "$work/ubnp.win" -s "$here/tools/port.csx" -o
 
 # 3. Repack the touch APK as a separate app with the modded data and music
 apktool d -s -f -o "$work/apk" "$TOUCH_APK"
+apktool d -f --no-res --no-assets -o "$work/smali" "$TOUCH_APK"
+python3 -I "$here/tools/patch_apk_lookup.py" "$work/smali/smali/com/jockeholm/undertale/DemoRenderer.smali"
+rm "$work/apk/classes.dex" && cp -r "$work/smali/smali" "$work/apk/smali"
 cp "$work/game.droid" "$work/apk/assets/game.droid"
 cp "$UBNP_DIR"/*.ogg "$work/apk/assets/"
 cp "$UBNP_DIR/Redone OST 'n More/mus_menu7.ogg" "$work/apk/assets/"
