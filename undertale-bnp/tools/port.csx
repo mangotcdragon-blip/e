@@ -52,7 +52,7 @@ foreach (var e in Data.Extensions) foreach (var f in e.Files) if (f.Kind == Unde
 // --- new code: the controller object and the save bridge scripts
 string Gml(string n) => File.ReadAllText(Path.Combine(port, "gml", n + ".gml"));
 var created = new[] { "gml_Object_obj_mobilecontroller_Create_0", "gml_Object_obj_mobilecontroller_Destroy_0",
-    "gml_Object_obj_mobilecontroller_Other_4", "gml_Object_obj_mobilecontroller_Step_0", "gml_Object_obj_mobilecontroller_Draw_64",
+    "gml_Object_obj_mobilecontroller_Other_4", "gml_Object_obj_mobilecontroller_Step_0", "gml_Object_obj_mobilecontroller_Step_1", "gml_Object_obj_mobilecontroller_Draw_64",
     "gml_Script_scr_ut_request", "gml_Script_scr_ut_export", "gml_Script_scr_ut_import", "gml_Script_scr_ut_savebridge" };
 foreach (var n in created) if (Data.Code.ByName(n) != null) throw new Exception(n + " already exists");
 var g1 = new CodeImportGroup(Data);

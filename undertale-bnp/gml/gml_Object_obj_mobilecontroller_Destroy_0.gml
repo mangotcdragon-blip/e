@@ -1,3 +1,8 @@
-virtual_key_delete(virtual_key_z);
-virtual_key_delete(virtual_key_x);
-virtual_key_delete(virtual_key_c);
+for (var k = 0; k < 3; k += 1)
+{
+    if (btn_sent[k])
+    {
+        keyboard_key_release(btn_key[k]);
+        btn_sent[k] = 0;
+    }
+}

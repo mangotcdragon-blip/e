@@ -29,15 +29,6 @@ else
 var gscale = min(window_get_height() / 480, window_get_width() / 640);
 padx = (-((window_get_width() / gscale) - 640) / 2) + 110;
 pady = jy;
-if (global.aspectratio != aspectratio_previous)
-{
-    virtual_key_delete(virtual_key_z);
-    virtual_key_delete(virtual_key_x);
-    virtual_key_delete(virtual_key_c);
-    virtual_key_z = virtual_key_add(zx, 347, 81, 93, 90);
-    virtual_key_x = virtual_key_add(xx, 308, 81, 93, 88);
-    virtual_key_c = virtual_key_add(cx, 269, 81, 93, 67);
-}
 aspectratio_previous = global.aspectratio;
 var joy_rightp = global.joy_right;
 var joy_leftp = global.joy_left;
@@ -601,21 +592,4 @@ if (global.joy_down != joy_downp && global.joy_down == 0)
 if (global.joy_up != joy_upp && global.joy_up == 0)
 {
     keyboard_key_release(vk_up);
-}
-if (keyboard_check(global.keybind[4]) && keyboard_check(global.keybind[6]) && keyboard_check(global.keybind[8]))
-{
-    enc_hold += 1;
-}
-else
-{
-    enc_hold = 0;
-}
-if (enc_hold == round(room_speed * 5) && room != room_battle && !instance_exists(obj_battlecontroller))
-{
-    global.encounter = 99999;
-    enc_flash = round(room_speed * 2);
-}
-if (enc_flash > 0)
-{
-    enc_flash -= 1;
 }

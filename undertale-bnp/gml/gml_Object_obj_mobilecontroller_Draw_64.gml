@@ -1,8 +1,8 @@
 var gui_s = min(window_get_height() / 480, window_get_width() / 640);
 display_set_gui_maximise(gui_s, gui_s, (window_get_width() - (640 * gui_s)) / 2, (window_get_height() - (480 * gui_s)) / 2);
-draw_sprite_ext(spr_control_zkey, keyboard_check(ord("Z")), zx, 350, 3, 3, 0, c_white, global.controller_opacity);
-draw_sprite_ext(spr_control_xkey, keyboard_check(ord("X")), xx, 311, 3, 3, 0, c_white, global.controller_opacity);
-draw_sprite_ext(spr_control_ckey, keyboard_check(ord("C")), cx, 272, 3, 3, 0, c_white, global.controller_opacity);
+draw_sprite_ext(spr_control_zkey, (bz || keyboard_check(ord("Z"))), zx, 350, 3, 3, 0, c_white, global.controller_opacity);
+draw_sprite_ext(spr_control_xkey, (bx || keyboard_check(ord("X"))), xx, 311, 3, 3, 0, c_white, global.controller_opacity);
+draw_sprite_ext(spr_control_ckey, (bc || keyboard_check(ord("C"))), cx, 272, 3, 3, 0, c_white, global.controller_opacity);
 var h = padcell / 2;
 var a = padcell * 0.22;
 var px = padx;
@@ -85,7 +85,7 @@ if (enc_flash > 0)
 {
     draw_set_halign(fa_center);
     draw_set_color(c_yellow);
-    draw_text(320, 40, "Encounter!");
+    draw_text(320, 40, enc_msg);
     draw_set_halign(fa_left);
     draw_set_color(c_white);
 }

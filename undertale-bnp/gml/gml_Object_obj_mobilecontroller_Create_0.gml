@@ -47,8 +47,20 @@ dbg_fy = -1;
 dbg_view = "";
 enc_hold = 0;
 enc_flash = 0;
+enc_msg = "";
+combo = 0;
+btn_delay = 3;
+bz = 0;
+bx = 0;
+bc = 0;
+btn_key[0] = 90;
+btn_key[1] = 88;
+btn_key[2] = 67;
+for (var k = 0; k < 3; k += 1)
+{
+    btn_time[k] = 0;
+    btn_sent[k] = 0;
+    btn_tap[k] = 0;
+}
 device_mouse_dbclick_enable(false);
 aspectratio_previous = window_get_height() / window_get_width();
-virtual_key_z = virtual_key_add(zx, 347, 81, 93, 90);
-virtual_key_x = virtual_key_add(xx, 308, 81, 93, 88);
-virtual_key_c = virtual_key_add(cx, 269, 81, 93, 67);
