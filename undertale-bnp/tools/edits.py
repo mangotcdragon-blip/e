@@ -121,13 +121,26 @@ s = rep(s, I4 + "shader_set(sh_saturation);\n" + I4 + "shader_set_uniform_f(satu
 s = rep(s, I4 + "draw_surface_ext(surface, xx, yy + h, 1, -1, 0, c_white, 0.5);\n" + I4 + "shader_reset();\n",
         I4 + "draw_surface_ext(surface, xx, yy + h, 1, -1, 0, c_white, 0.5);\n" + I4 + "if (shok)\n" + I4 + "{\n" + I4 + "    shader_reset();\n" + I4 + "}\n")
 wr(n, s)
-# LV 20 gives 120 max HP instead of 99 (set on level-up and re-applied at the start of every battle)
+# Max HP: LV 19 gives 125 (normally 92) and LV 20 gives 200 (normally 99). Set on level-up and
+# re-applied at the start of every battle so existing saves pick it up.
 n = "gml_Script_scr_levelup"; s = rd(n)
-s = rep(s, "    if (global.lv == 20)\n    {\n        global.maxhp = 99;\n", "    if (global.lv == 20)\n    {\n        global.maxhp = 120;\n")
+s = rep(s, "    if (global.lv == 20)\n    {\n        global.maxhp = 99;\n",
+        "    if (global.lv == 19)\n    {\n        global.maxhp = 125;\n    }\n    if (global.lv == 20)\n    {\n        global.maxhp = 200;\n")
 wr(n, s)
 n = "gml_Object_obj_battlecontroller_Create_0"; s = rd(n)
-s = rep(s, "    global.df = 30;\n    global.maxhp = 99;\n", "    global.df = 30;\n    global.maxhp = 120;\n")
+# (the overrides must come before the "hp > maxhp + 15" clamp, or full HP gets cut every battle)
+s = rep(s, "global.maxhp = 16 + (global.lv * 4);\nif (global.hp > (global.maxhp + 15))\n",
+        "global.maxhp = 16 + (global.lv * 4);\nif (global.lv == 19)\n{\n    global.maxhp = 125;\n}\nif (global.lv == 20)\n{\n    global.maxhp = 200;\n}\nif (global.hp > (global.maxhp + 15))\n")
+s = rep(s, "if (global.lv == 20)\n{\n    global.df = 30;\n    global.maxhp = 99;\n}\n", "if (global.lv == 20)\n{\n    global.df = 30;\n}\n")
 wr(n, s)
+# HP bars are drawn 1.2 px per max HP; above 120 max HP squeeze the bar to 144 px so the numbers stay on screen.
+for n in ["gml_Script_scr_binfowrite", "gml_Object_obj_floweydraw_Draw_0", "gml_Object_obj_soulvision_Draw_64"]:
+    s = rd(n)
+    assert "(global.maxhp * 1.2)" in s
+    for v in ["maxhp", "hp", "km"]:
+        s = s.replace("(global.%s * 1.2)" % v, "(global.%s * hpk)" % v)
+    assert "* 1.2)" not in s, n
+    wr(n, "var hpk = 1.2;\nif (global.maxhp > 120)\n{\n    hpk = 144 / global.maxhp;\n}\n" + s)
 
 for f in sorted(os.listdir(src)):
     n = f[:-4]
