@@ -41,7 +41,7 @@ export default function Settings() {
                         subLabel='"thou knowest", "he liketh", "I know not"'
                         field="verbs"
                     />
-                    <Switch label="Translate slang" subLabel="lol, idk, u, bro, brb, swearing and insults" field="slang" />
+                    <Switch label="Translate slang" subLabel="lol, idk, u, bro, brb, swearing, insults and sexual terms" field="slang" />
                     <Row
                         label="Send one message unchanged"
                         subLabel="Start it with a backslash (\). The backslash is removed before sending."
