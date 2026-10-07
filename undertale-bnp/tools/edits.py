@@ -164,6 +164,38 @@ if (expanded == 0)
 """)
 wr(n, s)
 
+# Food heals scale with max HP above 99, so items restore the same share of the bar as in vanilla.
+n = "gml_Script_scr_recoitem"; s = rd(n)
+s = "var heal = argument0;\nif (global.maxhp > 99)\n{\n    heal = round(heal * (global.maxhp / 99));\n}\n" + s
+s = rep(s, "script_execute(scr_recover, argument0 + 4);", "script_execute(scr_recover, heal + 4);")
+s = rep(s, "script_execute(scr_recover, argument0);", "script_execute(scr_recover, heal);")
+wr(n, s)
+
+# Blue soul: jump height depends on "up" still being held, read with keyboard_check_direct, which
+# doesn't see touch-simulated keys, so every jump was cut to a minimum hop. Use keyboard_check.
+for n in ["gml_Object_obj_heart_Step_0", "gml_Object_obj_heart_sansbattle_Step_0"]:
+    s = rd(n)
+    assert s.count("keyboard_check_direct(") == 4, n
+    wr(n, s.replace("keyboard_check_direct(", "keyboard_check("))
+
+# Sans fight damage:
+# - a bullet hit takes 1 HP every frame of contact; make it every other frame.
+n = "gml_Object_obj_sansb_body_Other_12"; s = rd(n)
+s = rep(s, "    global.hp -= 1;\n    damageturn = 1;\n", "    global.hp -= 1;\n    damageturn = 2;\n")
+wr(n, s)
+n = "gml_Object_obj_sansb_body_Draw_0"; s = rd(n)
+s = rep(s, "if (inv_check == 0)\n{\n    damageturn = 0;\n}\n", "if (inv_check == 0 && damageturn > 0)\n{\n    damageturn -= 1;\n}\n")
+wr(n, s)
+# - KR piles on extra while HP >= 60 (less from 30); those thresholds assume ~92 max HP. Scale them
+#   with max HP so KR isn't at full strength for most of the fight with 200 HP.
+for n in ["gml_Object_obj_sansbullet_parent_Other_17", "gml_Object_obj_menubone_Collision_af950111_6d65_46ff_a063_e0c46ecca201"]:
+    s = rd(n)
+    k = s.count("global.hp >= 60") + s.count("global.hp >= 30")
+    assert k > 0, n
+    s = s.replace("global.hp >= 60", "global.hp >= (60 * max(1, global.maxhp / 92))")
+    s = s.replace("global.hp >= 30", "global.hp >= (30 * max(1, global.maxhp / 92))")
+    wr(n, s)
+
 for f in sorted(os.listdir(src)):
     n = f[:-4]
     if f.endswith(".gml") and n not in written:

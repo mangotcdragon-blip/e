@@ -316,19 +316,19 @@ if (dodging)
                     {
                         y += ((other.tgy - y) * other.follow_k);
                     }
-                    if (movement == 2 && other.tgy < (y - 24))
+                    if (movement == 2 && other.tgy < (y - 4))
                     {
                         global.joy_up = 1;
                     }
-                    if (movement == 12 && other.tgy > (y + 24))
+                    if (movement == 12 && other.tgy > (y + 4))
                     {
                         global.joy_down = 1;
                     }
-                    if (movement == 11 && other.tgx < (x - 24))
+                    if (movement == 11 && other.tgx < (x - 4))
                     {
                         global.joy_left = 1;
                     }
-                    if (movement == 13 && other.tgx > (x + 24))
+                    if (movement == 13 && other.tgx > (x + 4))
                     {
                         global.joy_right = 1;
                     }
@@ -368,19 +368,19 @@ if (dodging)
                     {
                         y += ((other.tgy - y) * other.follow_k);
                     }
-                    if (movement == 2 && other.tgy < (y - 24))
+                    if (movement == 2 && other.tgy < (y - 4))
                     {
                         global.joy_up = 1;
                     }
-                    if (movement == 12 && other.tgy > (y + 24))
+                    if (movement == 12 && other.tgy > (y + 4))
                     {
                         global.joy_down = 1;
                     }
-                    if (movement == 11 && other.tgx < (x - 24))
+                    if (movement == 11 && other.tgx < (x - 4))
                     {
                         global.joy_left = 1;
                     }
-                    if (movement == 13 && other.tgx > (x + 24))
+                    if (movement == 13 && other.tgx > (x + 4))
                     {
                         global.joy_right = 1;
                     }
@@ -420,19 +420,19 @@ if (dodging)
                     {
                         y += ((other.tgy - y) * other.follow_k);
                     }
-                    if (movement == 2 && other.tgy < (y - 24))
+                    if (movement == 2 && other.tgy < (y - 4))
                     {
                         global.joy_up = 1;
                     }
-                    if (movement == 12 && other.tgy > (y + 24))
+                    if (movement == 12 && other.tgy > (y + 4))
                     {
                         global.joy_down = 1;
                     }
-                    if (movement == 11 && other.tgx < (x - 24))
+                    if (movement == 11 && other.tgx < (x - 4))
                     {
                         global.joy_left = 1;
                     }
-                    if (movement == 13 && other.tgx > (x + 24))
+                    if (movement == 13 && other.tgx > (x + 4))
                     {
                         global.joy_right = 1;
                     }
@@ -472,19 +472,19 @@ if (dodging)
                     {
                         y += ((other.tgy - y) * other.follow_k);
                     }
-                    if (movement == 2 && other.tgy < (y - 24))
+                    if (movement == 2 && other.tgy < (y - 4))
                     {
                         global.joy_up = 1;
                     }
-                    if (movement == 12 && other.tgy > (y + 24))
+                    if (movement == 12 && other.tgy > (y + 4))
                     {
                         global.joy_down = 1;
                     }
-                    if (movement == 11 && other.tgx < (x - 24))
+                    if (movement == 11 && other.tgx < (x - 4))
                     {
                         global.joy_left = 1;
                     }
-                    if (movement == 13 && other.tgx > (x + 24))
+                    if (movement == 13 && other.tgx > (x + 4))
                     {
                         global.joy_right = 1;
                     }
