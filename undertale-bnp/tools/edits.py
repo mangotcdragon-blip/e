@@ -38,7 +38,7 @@ wr(n, s)
 n = "gml_Object_obj_time_Draw_76"; s = rd(n)
 s = rep(s, "else if (global.osflavor >= 1)\n{", """else if (os_type == os_android || os_type == os_ios)
 {
-    if ((wh / ww) <= 0.5625 && global.screen_border_id != 0)
+    if ((wh / ww) <= 0.5625 && global.screen_border_id != 0 && global.screen_border_active)
     {
         global.window_scale = min(scale_w, scale_h) / 1.125;
     }
@@ -141,6 +141,28 @@ for n in ["gml_Script_scr_binfowrite", "gml_Object_obj_floweydraw_Draw_0", "gml_
         s = s.replace("(global.%s * 1.2)" % v, "(global.%s * hpk)" % v)
     assert "* 1.2)" not in s, n
     wr(n, "var hpk = 1.2;\nif (global.maxhp > 120)\n{\n    hpk = 144 / global.maxhp;\n}\n" + s)
+
+# obj_expander (Sans fight, Room of Bog) widens the view to the window's pixel size at 1:1 so the
+# battle can spill past 640x480. On a phone that renders everything at ~45% size. On Android/iOS
+# widen the view to the screen's shape instead, keeping the normal zoom around the original view.
+n = "gml_Object_obj_expander_Other_10"; s = rd(n)
+s = rep(s, "if (expanded == 0)\n{\n", """if (expanded == 0 && (os_type == os_android || os_type == os_ios))
+{
+    var xs = min(window_get_width() / origwv, window_get_height() / orighv);
+    var vw = round(window_get_width() / xs);
+    var vh = round(window_get_height() / xs);
+    __view_set(0, 0, origx - round((vw - origwv) / 2));
+    __view_set(1, 0, origy - round((vh - orighv) / 2));
+    __view_set(2, 0, vw);
+    __view_set(3, 0, vh);
+    display_set_gui_size(vw, vh);
+    surface_resize(application_surface, window_get_width(), window_get_height());
+    expanded = 1;
+}
+if (expanded == 0)
+{
+""")
+wr(n, s)
 
 for f in sorted(os.listdir(src)):
     n = f[:-4]
