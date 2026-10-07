@@ -197,6 +197,11 @@ for n in ["gml_Object_obj_sansbullet_parent_Other_17", "gml_Object_obj_menubone_
     s = s.replace("global.hp >= 60", "global.hp >= (60 * max(1, global.maxhp / 92))")
     s = s.replace("global.hp >= 30", "global.hp >= (30 * max(1, global.maxhp / 92))")
     wr(n, s)
+# - in the later phase KR was added on every frame of contact regardless of damageturn, so most of
+#   the damage arrived as KR anyway (in chunks). Only add KR on frames that actually deal damage.
+n = "gml_Object_obj_sansbullet_parent_Other_17"; s = open(os.path.join(out, n + ".gml")).read()
+s = rep(s, "if (instance_exists(obj_sansb_body))\n{\n", "if (instance_exists(obj_sansb_body))\n{\n    if (obj_sansb_body.damageturn != 0)\n    {\n        exit;\n    }\n")
+wr(n, s)
 
 # ---------------------------------------------------------------------------------------------
 # 16 inventory slots instead of 8. Slot 8 was the end-of-list sentinel / scratch value; it moves
