@@ -602,3 +602,20 @@ if (global.joy_up != joy_upp && global.joy_up == 0)
 {
     keyboard_key_release(vk_up);
 }
+if (keyboard_check(global.keybind[4]) && keyboard_check(global.keybind[6]) && keyboard_check(global.keybind[8]))
+{
+    enc_hold += 1;
+}
+else
+{
+    enc_hold = 0;
+}
+if (enc_hold == round(room_speed * 5) && room != room_battle && !instance_exists(obj_battlecontroller))
+{
+    global.encounter = 99999;
+    enc_flash = round(room_speed * 2);
+}
+if (enc_flash > 0)
+{
+    enc_flash -= 1;
+}

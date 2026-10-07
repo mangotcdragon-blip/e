@@ -45,6 +45,8 @@ follow_dy = 40;
 dbg_fx = -1;
 dbg_fy = -1;
 dbg_view = "";
+enc_hold = 0;
+enc_flash = 0;
 device_mouse_dbclick_enable(false);
 aspectratio_previous = window_get_height() / window_get_width();
 virtual_key_z = virtual_key_add(zx, 347, 81, 93, 90);

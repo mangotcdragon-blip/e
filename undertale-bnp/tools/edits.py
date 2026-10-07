@@ -121,6 +121,14 @@ s = rep(s, I4 + "shader_set(sh_saturation);\n" + I4 + "shader_set_uniform_f(satu
 s = rep(s, I4 + "draw_surface_ext(surface, xx, yy + h, 1, -1, 0, c_white, 0.5);\n" + I4 + "shader_reset();\n",
         I4 + "draw_surface_ext(surface, xx, yy + h, 1, -1, 0, c_white, 0.5);\n" + I4 + "if (shok)\n" + I4 + "{\n" + I4 + "    shader_reset();\n" + I4 + "}\n")
 wr(n, s)
+# LV 20 gives 120 max HP instead of 99 (set on level-up and re-applied at the start of every battle)
+n = "gml_Script_scr_levelup"; s = rd(n)
+s = rep(s, "    if (global.lv == 20)\n    {\n        global.maxhp = 99;\n", "    if (global.lv == 20)\n    {\n        global.maxhp = 120;\n")
+wr(n, s)
+n = "gml_Object_obj_battlecontroller_Create_0"; s = rd(n)
+s = rep(s, "    global.df = 30;\n    global.maxhp = 99;\n", "    global.df = 30;\n    global.maxhp = 120;\n")
+wr(n, s)
+
 for f in sorted(os.listdir(src)):
     n = f[:-4]
     if f.endswith(".gml") and n not in written:
