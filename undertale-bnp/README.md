@@ -8,8 +8,12 @@ No game data is stored here. `build.sh` needs your own Steam `data.win` and the 
 
 ## What changes in the mod's code
 
-- `obj_time` Create: removes the mod's `if (os_type == os_android) game_end();`, sets up the
-  touch globals, and spawns `obj_mobilecontroller` on Android/iOS.
+- Removes the mod's Android kill switches: 34 `if (os_type == os_android) game_end();` blocks
+  spread across `obj_time`, `obj_mainchara`, `obj_battlecontroller`, `SCR_GAMESTART` and boss fights.
+- `obj_time` Create: sets up the touch globals and spawns `obj_mobilecontroller` on Android/iOS.
+- NekoPresence (Windows Discord DLL): init/cleanup hooks cleared so they don't run on Android.
+- `com.utmod.DebugLog` (`java/`): writes the app's logcat and crash traces to Download/UndertaleBnP/.
+- `DemoRenderer`: finds its own APK via getPackageName() instead of the hardcoded original package.
 - `obj_time` Begin Step: keeps `global.aspectratio` current for the controller.
 - `obj_time` Pre-Draw: fractional scaling on phones (the mod's integer scaling would leave the
   game at 1x on 720p screens).

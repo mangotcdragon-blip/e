@@ -1,7 +1,11 @@
 import sys, os
 src, out = sys.argv[1], sys.argv[2]
-def rd(n): return open(os.path.join(src, n + ".gml")).read()
-def wr(n, s): open(os.path.join(out, n + ".gml"), "w").write(s)
+import re
+# The mod quits on Android in ~34 places (`if (os_type == os_android) { game_end(); }`); strip them all.
+KILL = re.compile(r'^([ \t]*)if \(os_type == os_android\)\n\1\{\n\1    game_end\(\);\n\1\}\n', re.M)
+written = set()
+def rd(n): return KILL.sub("", open(os.path.join(src, n + ".gml")).read())
+def wr(n, s): written.add(n); open(os.path.join(out, n + ".gml"), "w").write(s)
 def rep(s, old, new, count=1):
     c = s.count(old)
     assert c == count, (old[:80], c)
@@ -9,7 +13,6 @@ def rep(s, old, new, count=1):
 
 # obj_time Create: stop quitting on Android, set up the touch globals, spawn the controller
 n = "gml_Object_obj_time_Create_0"; s = rd(n)
-s = rep(s, "if (os_type == os_android)\n{\n    game_end();\n}\n", "")
 s += """global.controller_opacity = 0.5;
 global.controller_deadzoner = 0.5;
 global.joy_right = 0;
@@ -116,4 +119,12 @@ s = rep(s, I4 + "shader_set(sh_saturation);\n" + I4 + "shader_set_uniform_f(satu
 s = rep(s, I4 + "draw_surface_ext(surface, xx, yy + h, 1, -1, 0, c_white, 0.5);\n" + I4 + "shader_reset();\n",
         I4 + "draw_surface_ext(surface, xx, yy + h, 1, -1, 0, c_white, 0.5);\n" + I4 + "if (shok)\n" + I4 + "{\n" + I4 + "    shader_reset();\n" + I4 + "}\n")
 wr(n, s)
-print("ok2")
+for f in sorted(os.listdir(src)):
+    n = f[:-4]
+    if f.endswith(".gml") and n not in written:
+        raw = open(os.path.join(src, f)).read()
+        if KILL.search(raw):
+            wr(n, KILL.sub("", raw))
+left = [n for n in written if KILL.search(open(os.path.join(out, n + ".gml")).read())]
+assert not left, left
+print("ok", len(written), "entries")
