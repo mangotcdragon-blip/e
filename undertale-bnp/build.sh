@@ -6,7 +6,7 @@
 #   UBNP_DIR   extracted utbnp-v4.2.4 folder (ubnp.zip release asset)
 #   TOUCH_APK  undertale-touch.apk (branch ccr-f0e23b74-wygqmt), used as the APK container
 #   UTMT_CLI   UndertaleModCli binary built from UnderminersTeam/UndertaleModTool
-# Needs: xdelta3, apktool, zipalign, apksigner, python3, javac; ANDROID_JAR (platforms/android-28/android.jar) and D8 (build-tools d8).
+# Needs: xdelta3, apktool, zipalign, apksigner, python3, javac; ANDROID_JAR (platforms/android-30/android.jar) and D8 (build-tools d8).
 set -euo pipefail
 
 here="$(cd "$(dirname "$0")" && pwd)"

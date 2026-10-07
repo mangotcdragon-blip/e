@@ -1,15 +1,19 @@
 package com.utmod;
 
 import android.app.Activity;
+import android.content.ContentValues;
 import android.content.Context;
 import android.content.pm.PackageManager;
 import android.os.Build;
+import android.net.Uri;
 import android.os.Environment;
+import android.provider.MediaStore;
 
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.InputStreamReader;
+import java.io.OutputStream;
 import java.io.PrintWriter;
 import java.text.SimpleDateFormat;
 import java.util.Date;
@@ -21,7 +25,7 @@ import java.util.Locale;
  */
 public final class DebugLog {
     private static PrintWriter out;
-    private static File file;
+    private static String where;
 
     public static synchronized void start(Context ctx) {
         if (out != null) return;
@@ -33,19 +37,35 @@ public final class DebugLog {
         } catch (Throwable ignored) {
         }
         String stamp = new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(new Date());
+        String name = "log_" + stamp + ".txt";
+        // Android 10+: MediaStore can add a file to Download/ without any permission.
+        if (Build.VERSION.SDK_INT >= 29) {
+            try {
+                ContentValues v = new ContentValues();
+                v.put(MediaStore.MediaColumns.DISPLAY_NAME, name);
+                v.put(MediaStore.MediaColumns.MIME_TYPE, "text/plain");
+                v.put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/UndertaleBnP");
+                Uri uri = ctx.getContentResolver().insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, v);
+                OutputStream os = ctx.getContentResolver().openOutputStream(uri);
+                out = new PrintWriter(os, true);
+                where = "Download/UndertaleBnP/" + name;
+            } catch (Throwable e) {
+                out = null;
+            }
+        }
         File[] dirs = {
             new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "UndertaleBnP"),
             ctx.getExternalFilesDir(null),
             ctx.getFilesDir(),
         };
         for (File dir : dirs) {
+            if (out != null) break;
             try {
                 if (dir == null) continue;
                 dir.mkdirs();
-                File f = new File(dir, "log_" + stamp + ".txt");
+                File f = new File(dir, name);
                 out = new PrintWriter(new FileOutputStream(f), true);
-                file = f;
-                break;
+                where = f.getAbsolutePath();
             } catch (Throwable ignored) {
                 out = null;
             }
@@ -54,7 +74,7 @@ public final class DebugLog {
         out.println("UNDERTALE BnP debug log " + stamp);
         out.println("device: " + Build.MANUFACTURER + " " + Build.MODEL + ", Android " + Build.VERSION.RELEASE
                 + " (API " + Build.VERSION.SDK_INT + "), abi " + Build.SUPPORTED_ABIS[0]);
-        out.println("log file: " + file.getAbsolutePath());
+        out.println("log file: " + where);
         out.println();
 
         final Thread.UncaughtExceptionHandler previous = Thread.getDefaultUncaughtExceptionHandler();
