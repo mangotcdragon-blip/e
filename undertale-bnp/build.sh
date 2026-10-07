@@ -6,7 +6,7 @@
 #   UBNP_DIR   extracted utbnp-v4.2.4 folder (ubnp.zip release asset)
 #   TOUCH_APK  undertale-touch.apk (branch ccr-f0e23b74-wygqmt), used as the APK container
 #   UTMT_CLI   UndertaleModCli binary built from UnderminersTeam/UndertaleModTool
-# Needs: xdelta3, apktool, zipalign, apksigner, python3.
+# Needs: xdelta3, apktool, zipalign, apksigner, python3, javac; ANDROID_JAR (platforms/android-28/android.jar) and D8 (build-tools d8).
 set -euo pipefail
 
 here="$(cd "$(dirname "$0")" && pwd)"
@@ -29,6 +29,12 @@ apktool d -s -f -o "$work/apk" "$TOUCH_APK"
 apktool d -f --no-res --no-assets -o "$work/smali" "$TOUCH_APK"
 python3 -I "$here/tools/patch_apk_lookup.py" "$work/smali/smali/com/jockeholm/undertale/DemoRenderer.smali"
 rm "$work/apk/classes.dex" && cp -r "$work/smali/smali" "$work/apk/smali"
+python3 -I "$here/tools/hook_debuglog.py" "$work/apk/smali/com/jockeholm/undertale/RunnerActivity.smali"
+# DebugLog: logcat + crash traces to Download/UndertaleBnP/ (needs ANDROID_JAR and D8)
+mkdir -p "$work/java"
+javac --release 8 -cp "$ANDROID_JAR" -d "$work/java" "$here/java/com/utmod/DebugLog.java"
+"$D8" --min-api 21 --lib "$ANDROID_JAR" --output "$work/java" "$work"/java/com/utmod/*.class
+cp "$work/java/classes.dex" "$work/apk/classes3.dex"
 cp "$work/game.droid" "$work/apk/assets/game.droid"
 cp "$UBNP_DIR"/*.ogg "$work/apk/assets/"
 cp "$UBNP_DIR/Redone OST 'n More/mus_menu7.ogg" "$work/apk/assets/"

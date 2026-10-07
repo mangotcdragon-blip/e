@@ -44,6 +44,11 @@ for (int k = 0; k < names.Length; k++) {
     Data.Sprites.Add(spr);
 }
 
+// --- NekoPresence is a Windows-only Discord DLL; its init hook would run (and fail) at startup on Android.
+// Keep the extension so its function names still resolve, but drop the init/cleanup hooks.
+foreach (var e in Data.Extensions) foreach (var f in e.Files) if (f.Kind == UndertaleExtensionKind.Dll) {
+    f.InitScript = Data.Strings.MakeString(""); f.CleanupScript = Data.Strings.MakeString(""); }
+
 // --- new code: the controller object and the save bridge scripts
 string Gml(string n) => File.ReadAllText(Path.Combine(port, "gml", n + ".gml"));
 var created = new[] { "gml_Object_obj_mobilecontroller_Create_0", "gml_Object_obj_mobilecontroller_Destroy_0",
