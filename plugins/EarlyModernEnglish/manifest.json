@@ -1,0 +1,14 @@
+{
+    "name": "Early Modern English",
+    "description": "Rewrites the messages you send into Early Modern English: thou art, methinks, prithee, good morrow.",
+    "authors": [
+        {
+            "name": "mangotcdragon",
+            "id": "0"
+        }
+    ],
+    "main": "src/index.ts",
+    "vendetta": {
+        "icon": "ic_edit_24px"
+    }
+}
