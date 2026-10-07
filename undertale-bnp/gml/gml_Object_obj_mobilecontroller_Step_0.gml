@@ -300,7 +300,7 @@ if (dodging)
             tgy = fy - 8 - follow_dy;
             with (obj_heart)
             {
-                if (global.mnfight == 2 && ignore_border == 0 && (movement == 1 || movement == 2 || movement == 11 || movement == 12 || movement == 13))
+                if (global.mnfight == 2 && (movement == 1 || movement == 2 || movement == 11 || movement == 12 || movement == 13))
                 {
                     other.mode = movement;
                     if (movement == 1)
@@ -332,7 +332,17 @@ if (dodging)
                     {
                         global.joy_right = 1;
                     }
-                    if (instance_exists(obj_lborder) && instance_exists(obj_rborder) && instance_exists(obj_uborder) && instance_exists(obj_dborder))
+                    var no_box = 0;
+                    if (variable_instance_exists(id, "ignore_border"))
+                    {
+                        no_box = ignore_border == 1;
+                    }
+                    if (no_box)
+                    {
+                        x = clamp(x, vk_x, (vk_x + vk_w) - 16);
+                        y = clamp(y, vk_y, (vk_y + vk_h) - 16);
+                    }
+                    else if (instance_exists(obj_lborder) && instance_exists(obj_rborder) && instance_exists(obj_uborder) && instance_exists(obj_dborder))
                     {
                         x = max(x, obj_lborder.x + 5);
                         x = min(x, obj_rborder.x - 16);
@@ -352,7 +362,7 @@ if (dodging)
             }
             with (obj_heart_sansbattle)
             {
-                if (global.mnfight == 2 && ignore_border == 0 && (movement == 1 || movement == 2 || movement == 11 || movement == 12 || movement == 13))
+                if (global.mnfight == 2 && (movement == 1 || movement == 2 || movement == 11 || movement == 12 || movement == 13))
                 {
                     other.mode = movement;
                     if (movement == 1)
@@ -384,7 +394,17 @@ if (dodging)
                     {
                         global.joy_right = 1;
                     }
-                    if (instance_exists(obj_lborder) && instance_exists(obj_rborder) && instance_exists(obj_uborder) && instance_exists(obj_dborder))
+                    var no_box = 0;
+                    if (variable_instance_exists(id, "ignore_border"))
+                    {
+                        no_box = ignore_border == 1;
+                    }
+                    if (no_box)
+                    {
+                        x = clamp(x, vk_x, (vk_x + vk_w) - 16);
+                        y = clamp(y, vk_y, (vk_y + vk_h) - 16);
+                    }
+                    else if (instance_exists(obj_lborder) && instance_exists(obj_rborder) && instance_exists(obj_uborder) && instance_exists(obj_dborder))
                     {
                         x = max(x, obj_lborder.x + 5);
                         x = min(x, obj_rborder.x - 16);
@@ -436,7 +456,17 @@ if (dodging)
                     {
                         global.joy_right = 1;
                     }
-                    if (instance_exists(obj_lborder) && instance_exists(obj_rborder) && instance_exists(obj_uborder) && instance_exists(obj_dborder))
+                    var no_box = 0;
+                    if (variable_instance_exists(id, "ignore_border"))
+                    {
+                        no_box = ignore_border == 1;
+                    }
+                    if (no_box)
+                    {
+                        x = clamp(x, vk_x, (vk_x + vk_w) - 16);
+                        y = clamp(y, vk_y, (vk_y + vk_h) - 16);
+                    }
+                    else if (instance_exists(obj_lborder) && instance_exists(obj_rborder) && instance_exists(obj_uborder) && instance_exists(obj_dborder))
                     {
                         x = max(x, obj_lborder.x + 5);
                         x = min(x, obj_rborder.x - 16);
@@ -488,7 +518,17 @@ if (dodging)
                     {
                         global.joy_right = 1;
                     }
-                    if (instance_exists(obj_lborder) && instance_exists(obj_rborder) && instance_exists(obj_uborder) && instance_exists(obj_dborder))
+                    var no_box = 0;
+                    if (variable_instance_exists(id, "ignore_border"))
+                    {
+                        no_box = ignore_border == 1;
+                    }
+                    if (no_box)
+                    {
+                        x = clamp(x, vk_x, (vk_x + vk_w) - 16);
+                        y = clamp(y, vk_y, (vk_y + vk_h) - 16);
+                    }
+                    else if (instance_exists(obj_lborder) && instance_exists(obj_rborder) && instance_exists(obj_uborder) && instance_exists(obj_dborder))
                     {
                         x = max(x, obj_lborder.x + 5);
                         x = min(x, obj_rborder.x - 16);
