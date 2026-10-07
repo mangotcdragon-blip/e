@@ -1,4 +1,5 @@
-display_set_gui_size(640, 480);
+var gui_s = min(window_get_height() / 480, window_get_width() / 640);
+display_set_gui_maximise(gui_s, gui_s, (window_get_width() - (640 * gui_s)) / 2, (window_get_height() - (480 * gui_s)) / 2);
 draw_sprite_ext(spr_control_zkey, keyboard_check(ord("Z")), zx, 350, 3, 3, 0, c_white, global.controller_opacity);
 draw_sprite_ext(spr_control_xkey, keyboard_check(ord("X")), xx, 311, 3, 3, 0, c_white, global.controller_opacity);
 draw_sprite_ext(spr_control_ckey, keyboard_check(ord("C")), cx, 272, 3, 3, 0, c_white, global.controller_opacity);

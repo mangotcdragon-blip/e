@@ -1,3 +1,5 @@
+var gui_s = min(window_get_height() / 480, window_get_width() / 640);
+display_set_gui_maximise(gui_s, gui_s, (window_get_width() - (640 * gui_s)) / 2, (window_get_height() - (480 * gui_s)) / 2);
 if (global.aspectratio <= 0.5625)
 {
     zx = 476;
