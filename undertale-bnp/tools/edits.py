@@ -164,9 +164,9 @@ if (expanded == 0)
 """)
 wr(n, s)
 
-# Food heals scale with max HP above 99, so items restore the same share of the bar as in vanilla.
+# Food heals 1.5x, and also scale with max HP above 99.
 n = "gml_Script_scr_recoitem"; s = rd(n)
-s = "var heal = argument0;\nif (global.maxhp > 99)\n{\n    heal = round(heal * (global.maxhp / 99));\n}\n" + s
+s = "var heal = argument0 * 1.5;\nif (global.maxhp > 99)\n{\n    heal = heal * (global.maxhp / 99);\n}\nheal = round(heal);\n" + s
 s = rep(s, "script_execute(scr_recover, argument0 + 4);", "script_execute(scr_recover, heal + 4);")
 s = rep(s, "script_execute(scr_recover, argument0);", "script_execute(scr_recover, heal);")
 wr(n, s)
@@ -179,12 +179,14 @@ for n in ["gml_Object_obj_heart_Step_0", "gml_Object_obj_heart_sansbattle_Step_0
     wr(n, s.replace("keyboard_check_direct(", "keyboard_check("))
 
 # Sans fight damage:
-# - a bullet hit takes 1 HP every frame of contact; make it every other frame.
+# - a bullet hit takes 1 HP every frame of contact; make it every 4th frame.
+# - KR (karma) drains at half speed.
 n = "gml_Object_obj_sansb_body_Other_12"; s = rd(n)
-s = rep(s, "    global.hp -= 1;\n    damageturn = 1;\n", "    global.hp -= 1;\n    damageturn = 2;\n")
+s = rep(s, "    global.hp -= 1;\n    damageturn = 1;\n", "    global.hp -= 1;\n    damageturn = 4;\n")
 wr(n, s)
 n = "gml_Object_obj_sansb_body_Draw_0"; s = rd(n)
 s = rep(s, "if (inv_check == 0)\n{\n    damageturn = 0;\n}\n", "if (inv_check == 0 && damageturn > 0)\n{\n    damageturn -= 1;\n}\n")
+s = rep(s, "    km_t += 1;\n", "    km_t += 0.5;\n")
 wr(n, s)
 # - KR piles on extra while HP >= 60 (less from 30); those thresholds assume ~92 max HP. Scale them
 #   with max HP so KR isn't at full strength for most of the fight with 200 HP.
