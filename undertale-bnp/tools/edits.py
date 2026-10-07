@@ -20,6 +20,8 @@ global.joy_left = 0;
 global.joy_up = 0;
 global.joy_down = 0;
 global.aspectratio = window_get_height() / window_get_width();
+global.window_xofs = 0;
+global.window_yofs = 0;
 if (os_type == os_android || os_type == os_ios)
 {
     instance_create(0, 0, obj_mobilecontroller);
