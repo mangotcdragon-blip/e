@@ -1,5 +1,17 @@
 var gui_s = min(window_get_height() / 480, window_get_width() / 640);
 display_set_gui_maximise(gui_s, gui_s, (window_get_width() - (640 * gui_s)) / 2, (window_get_height() - (480 * gui_s)) / 2);
+var vk_w = __view_get(2, 0);
+var vk_h = __view_get(3, 0);
+if (vk_w <= 0 || vk_h <= 0)
+{
+    vk_w = 640;
+    vk_h = 480;
+}
+var sk_x = vk_w / surface_get_width(application_surface);
+var sk_y = vk_h / surface_get_height(application_surface);
+var vk_x = __view_get(0, 0);
+var vk_y = __view_get(1, 0);
+dbg_view = "v" + string(vk_x) + "," + string(vk_y) + "," + string(vk_w) + "x" + string(vk_h) + " s" + string(surface_get_width(application_surface)) + "x" + string(surface_get_height(application_surface)) + " xo" + string(global.window_xofs);
 if (global.aspectratio <= 0.5625)
 {
     zx = 476;
@@ -161,6 +173,8 @@ if (dodging)
             }
             var rx = ((((ww3 - (640 * gs3)) / 2) + (tx * gs3)) - global.window_xofs) / ws3;
             var ry = ((((wh3 - (480 * gs3)) / 2) + (ty * gs3)) - global.window_yofs) / ws3;
+            rx = vk_x + (rx * sk_x);
+            ry = vk_y + (ry * sk_y);
             var cx3 = obj_spearblocker.x;
             var cy3 = obj_spearblocker.y;
             var ddx = rx - cx3;
@@ -202,7 +216,9 @@ if (dodging)
                 ws5 = gs5;
             }
             var ox5 = ((((ww5 - (640 * gs5)) / 2) + (tx * gs5)) - global.window_xofs) / ws5;
-            var oy5 = (((((wh5 - (480 * gs5)) / 2) + (ty * gs5)) - global.window_yofs) / ws5) - follow_dy;
+            var oy5 = ((((wh5 - (480 * gs5)) / 2) + (ty * gs5)) - global.window_yofs) / ws5;
+            ox5 = vk_x + (ox5 * sk_x);
+            oy5 = (vk_y + (oy5 * sk_y)) - follow_dy;
             dbg_fx = ox5;
             dbg_fy = oy5;
             with (obj_vsflowey_heart)
@@ -244,7 +260,9 @@ if (dodging)
                 ws4 = gs4;
             }
             var px4 = ((((ww4 - (640 * gs4)) / 2) + (tx * gs4)) - global.window_xofs) / ws4;
-            var py4 = (((((wh4 - (480 * gs4)) / 2) + (ty * gs4)) - global.window_yofs) / ws4) - follow_dy;
+            var py4 = ((((wh4 - (480 * gs4)) / 2) + (ty * gs4)) - global.window_yofs) / ws4;
+            px4 = vk_x + (px4 * sk_x);
+            py4 = (vk_y + (py4 * sk_y)) - follow_dy;
             dbg_fx = px4;
             dbg_fy = py4;
             with (obj_purpleheart)
@@ -283,6 +301,8 @@ if (dodging)
             }
             fx = ((gx0 + (tx * gs)) - global.window_xofs) / ws;
             fy = ((gy0 + (ty * gs)) - global.window_yofs) / ws;
+            fx = vk_x + (fx * sk_x);
+            fy = vk_y + (fy * sk_y);
             dbg_fx = fx;
             dbg_fy = fy;
             tgx = fx - 8;

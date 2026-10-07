@@ -78,6 +78,6 @@ if (tcount >= 3)
     draw_set_alpha(1);
     draw_set_color(c_yellow);
     draw_set_halign(fa_left);
-    draw_text(4, 2, "mn" + string(global.mnfight) + " dg" + string(dodging) + " dr" + string(dragmode) + " h" + string(hn) + " " + hinfo + " f" + string(round(dbg_fx)) + "," + string(round(dbg_fy)) + " n" + string(tcount) + tinfo + " md" + string(mode) + " gr" + string(green) + " pu" + string(purple) + " om" + string(omega) + " ws" + string(global.window_scale));
+    draw_text(4, 2, "mn" + string(global.mnfight) + " dg" + string(dodging) + " dr" + string(dragmode) + " h" + string(hn) + " " + hinfo + " f" + string(round(dbg_fx)) + "," + string(round(dbg_fy)) + " n" + string(tcount) + tinfo + " md" + string(mode) + " gr" + string(green) + " pu" + string(purple) + " om" + string(omega) + " ws" + string(global.window_scale) + " " + dbg_view);
 }
 draw_set_color(c_white);
