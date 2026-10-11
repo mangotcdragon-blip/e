@@ -41,3 +41,7 @@ Output lands in `dist/<PLUGIN_NAME>/` with a `manifest.json` carrying the bundle
 ## License
 
 CC0-1.0, same as upstream. Plugin authors are credited in each `manifest.json`.
+
+## Minecraft shader pack
+
+`minecraft-shaders/` holds **Solstice**, an unrelated project: a full OptiFine/Iris shader pack for Minecraft Java Edition. See [`minecraft-shaders/README.md`](minecraft-shaders/README.md).
