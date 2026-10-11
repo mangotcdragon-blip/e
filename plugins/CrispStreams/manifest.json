@@ -1,0 +1,14 @@
+{
+    "name": "Crisp Streams",
+    "description": "Watch screen shares at full quality instead of the blurry, pixelated version Discord picks for a phone-sized tile.",
+    "authors": [
+        {
+            "name": "mangotcdragon",
+            "id": "0"
+        }
+    ],
+    "main": "src/index.ts",
+    "vendetta": {
+        "icon": "ic_video"
+    }
+}
