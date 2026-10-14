@@ -9,10 +9,10 @@ JAR="$SDK/platforms/android-35/android.jar"
 
 rm -rf build && mkdir -p build/gen build/classes build/dex
 "$BT/aapt2" compile --dir res -o build/res.zip
-"$BT/aapt2" link -I "$JAR" --manifest AndroidManifest.xml --java build/gen \
+"$BT/aapt2" link -I "$JAR" --manifest AndroidManifest.xml --java build/gen -0 mp3 \
   -o build/unsigned.apk build/res.zip
-javac --release 8 -classpath "$JAR" -d build/classes \
-  $(find src build/gen -name '*.java') 2>&1 | grep -v 'source value 8\|target value 8\|suppress this warning\|^warning:\|^[0-9] warning' || true
+javac --release 8 -Xlint:-options -classpath "$JAR" -d build/classes \
+  $(find src build/gen -name '*.java')
 "$BT/d8" --min-api 21 --lib "$JAR" --output build/dex $(find build/classes -name '*.class')
 (cd build/dex && zip -q ../unsigned.apk classes.dex)
 "$BT/zipalign" -f 4 build/unsigned.apk build/aligned.apk
