@@ -1,0 +1,72 @@
+name: Model Studio Android app
+
+on:
+    push:
+        paths:
+            - "apps/model-studio/**"
+            - ".github/workflows/model-studio.yml"
+    workflow_dispatch:
+
+concurrency:
+    group: model-studio-${{ github.ref }}
+    cancel-in-progress: true
+
+jobs:
+    build:
+        runs-on: ubuntu-latest
+        permissions:
+            contents: write
+        env:
+            MS_KEYSTORE_BASE64: ${{ secrets.MS_KEYSTORE_BASE64 }}
+
+        steps:
+            - uses: actions/checkout@v4
+
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: "22"
+                  cache: npm
+                  cache-dependency-path: apps/model-studio/web/package-lock.json
+
+            - name: Build the web app
+              working-directory: apps/model-studio/web
+              run: |
+                  npm ci
+                  npm run build
+
+            - uses: actions/setup-java@v4
+              with:
+                  distribution: temurin
+                  java-version: "17"
+
+            - uses: gradle/actions/setup-gradle@v4
+
+              # Optional: sign with your own key so updates install over older builds (see apps/model-studio/README.md)
+            - name: Set up signing key
+              if: env.MS_KEYSTORE_BASE64 != ''
+              run: |
+                  echo "$MS_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.keystore"
+                  echo "MS_KEYSTORE=$RUNNER_TEMP/release.keystore" >> "$GITHUB_ENV"
+
+            - name: Build the APK
+              working-directory: apps/model-studio/android
+              env:
+                  MS_KEYSTORE_PASSWORD: ${{ secrets.MS_KEYSTORE_PASSWORD }}
+                  MS_KEY_ALIAS: ${{ secrets.MS_KEY_ALIAS }}
+                  MS_KEY_PASSWORD: ${{ secrets.MS_KEY_PASSWORD }}
+              run: ./gradlew assembleRelease --no-daemon
+
+            - uses: actions/upload-artifact@v4
+              with:
+                  name: ModelStudio-apk
+                  path: apps/model-studio/android/app/build/outputs/apk/release/*.apk
+
+            - name: Publish to the model-studio-latest release
+              if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+              uses: softprops/action-gh-release@v2
+              with:
+                  tag_name: model-studio-latest
+                  name: Model Studio (latest build)
+                  body: Latest Android build of Model Studio from ${{ github.sha }}. Download the APK on your phone and open it to install.
+                  files: apps/model-studio/android/app/build/outputs/apk/release/*.apk
+                  make_latest: false

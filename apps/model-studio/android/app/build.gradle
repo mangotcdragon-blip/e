@@ -1,0 +1,78 @@
+plugins {
+    id 'com.android.application'
+}
+
+// The UI is the web app in ../../web, bundled into the APK's assets.
+def webDist = file('../../web/dist')
+def webOut = layout.buildDirectory.dir('generated/webapp')
+
+tasks.register('copyWebApp', Copy) {
+    doFirst {
+        if (!new File(webDist, 'index.html').exists()) {
+            throw new GradleException('Build the web app first: cd apps/model-studio/web && npm ci && npm run build')
+        }
+    }
+    from webDist
+    into webOut.map { it.dir('www') }
+}
+
+android {
+    namespace 'com.modelstudio.app'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'com.modelstudio.app'
+        minSdk 26
+        targetSdk 35
+        versionCode 1
+        versionName '1.0.0'
+    }
+
+    // Release builds use your own key when MS_KEYSTORE etc. are set (see README), so
+    // updates install over each other; otherwise the debug key, which still installs fine.
+    def keystore = System.getenv('MS_KEYSTORE')
+    signingConfigs {
+        own {
+            if (keystore) {
+                storeFile file(keystore)
+                storePassword System.getenv('MS_KEYSTORE_PASSWORD')
+                keyAlias System.getenv('MS_KEY_ALIAS')
+                keyPassword System.getenv('MS_KEY_PASSWORD') ?: System.getenv('MS_KEYSTORE_PASSWORD')
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig keystore ? signingConfigs.own : signingConfigs.debug
+        }
+    }
+
+    sourceSets {
+        main {
+            assets.srcDirs += webOut.get().asFile
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    applicationVariants.all { variant ->
+        variant.outputs.all {
+            outputFileName = "ModelStudio-${variant.versionName}-${variant.buildType.name}.apk"
+        }
+    }
+}
+
+preBuild.dependsOn 'copyWebApp'
+
+dependencies {
+    // Aligns the Kotlin stdlib pulled in by androidx (otherwise jdk7/jdk8 copies clash).
+    implementation platform('org.jetbrains.kotlin:kotlin-bom:1.8.22')
+    implementation 'androidx.activity:activity:1.9.3'
+    implementation 'androidx.core:core:1.13.1'
+    implementation 'androidx.webkit:webkit:1.12.1'
+}

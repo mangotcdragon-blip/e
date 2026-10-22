@@ -30,6 +30,10 @@ These are served straight from the `gh-pages` branch, which the deploy workflow 
 
 Using any client mod is against Discord's Terms of Service.
 
+## Model Studio (Android app)
+
+This repository also holds **Model Studio**, an Android app for viewing, restyling, animating and converting 3D models and Minecraft models (Java JSON, Bedrock, Blockbench), with its own `.msanim` animation format. See [`apps/model-studio`](apps/model-studio/README.md). It is built separately from the plugins and does not affect them.
+
 ## Building locally
 
 ```

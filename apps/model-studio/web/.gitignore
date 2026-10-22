@@ -1,0 +1,2 @@
+# Root .gitignore ignores lockfiles; this one is needed for `npm ci`
+!package-lock.json
