@@ -5,9 +5,11 @@ import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
+import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { applyFaceShade } from './loaders/cuboid.js';
 import { collectMaterials } from './loaders/index.js';
+import { getGlow, glowMap } from './materials.js';
 
 // Ambient intensity at which an unlit white material renders as pure white.
 const FLAT = Math.PI;
@@ -26,8 +28,8 @@ export const DEFAULT_SETTINGS = {
 	autoRotate: false,
 	textures: true,
 	faceShade: true,
-	bloomStrength: 0.6,
-	bloomRadius: 0.3,
+	bloomStrength: 1,
+	bloomRadius: 0.5,
 	wireframe: false,
 };
 
@@ -87,11 +89,32 @@ export class Viewer {
 		const pmrem = new THREE.PMREMGenerator(renderer);
 		this.envMap = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
 
+		// Selective glow: glowing parts are drawn alone (everything else black) into a
+		// blurred "bloom" image, which is then added on top of the normal render.
+		this.bloomComposer = new EffectComposer(renderer);
+		this.bloomComposer.renderToScreen = false;
+		this.bloomComposer.addPass(new RenderPass(this.scene, this.camera));
+		this.bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 1, 0.5, 0);
+		this.bloomComposer.addPass(this.bloom);
 		this.composer = new EffectComposer(renderer);
 		this.composer.addPass(new RenderPass(this.scene, this.camera));
-		this.bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.8, 0.4, 1.0);
-		this.composer.addPass(this.bloom);
+		const mix = new ShaderPass(
+			new THREE.ShaderMaterial({
+				uniforms: { baseTexture: { value: null }, bloomTexture: { value: this.bloomComposer.renderTarget2.texture }, sharpTexture: { value: null } },
+				vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+				// Halo = blurred glow, kept off the glowing surfaces themselves so they keep their
+				// texture detail. "Screen" blend so the halo can't burn anything to white.
+				fragmentShader: 'uniform sampler2D baseTexture; uniform sampler2D bloomTexture; uniform sampler2D sharpTexture; varying vec2 vUv; void main() { vec4 base = texture2D(baseTexture, vUv); vec3 sharp = texture2D(sharpTexture, vUv).rgb; float onSurface = clamp(max(sharp.r, max(sharp.g, sharp.b)) * 20.0, 0.0, 1.0); vec3 halo = clamp(texture2D(bloomTexture, vUv).rgb - sharp, 0.0, 0.9) * (1.0 - onSurface); gl_FragColor = vec4(base.rgb + halo * (1.0 - clamp(base.rgb, 0.0, 1.0)), base.a); }',
+			}),
+			'baseTexture',
+		);
+		mix.needsSwap = true;
+		this.sharpTarget = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType });
+		mix.uniforms.sharpTexture.value = this.sharpTarget.texture;
+		this.composer.addPass(mix);
 		this.composer.addPass(new OutputPass());
+		this.glowMats = new WeakMap();
+		this.darkMats = new WeakMap();
 
 		this.radius = 1;
 		this.clock = new THREE.Clock();
@@ -122,6 +145,9 @@ export class Viewer {
 		const w = this.container.clientWidth || 1, h = this.container.clientHeight || 1;
 		this.renderer.setSize(w, h, false);
 		this.composer.setSize(w, h);
+		this.bloomComposer.setSize(w, h);
+		const pr = this.renderer.getPixelRatio();
+		this.sharpTarget.setSize(Math.round(w * pr), Math.round(h * pr));
 		this.camera.aspect = w / h;
 		this.camera.updateProjectionMatrix();
 		this.invalidate();
@@ -239,7 +265,7 @@ export class Viewer {
 				m.map = want;
 				m.needsUpdate = true;
 			}
-			if (m.userData.glowUsesTexture) m.emissiveMap = m.map;
+			this.syncGlow(m);
 			if (m.wireframe !== (s.wireframe || !!m.userData.wireframe)) m.wireframe = s.wireframe || !!m.userData.wireframe;
 		}
 		this.model?.traverse((o) => {
@@ -252,13 +278,95 @@ export class Viewer {
 	setMaterialMap(m, tex) {
 		m.userData.origMap = tex;
 		m.map = this.settings.textures ? tex : null;
-		if (m.userData.glowUsesTexture) m.emissiveMap = m.map;
+		this.syncGlow(m);
 		m.needsUpdate = true;
 		this.invalidate();
 	}
 
+	// How a glowing surface itself looks. The halo comes from renderBloom(); the
+	// surface only gets a little self-light so it doesn't wash out to white.
+	syncGlow(m) {
+		const g = getGlow(m);
+		const studio = this.settings.studioLight;
+		let map = null, intensity = 0;
+		if (g) {
+			map = glowMap(m);
+			if (!this.settings.textures && g.useTexture) map = null;
+			if (g.useTexture) intensity = studio ? 0.8 : 0;
+			else if (g.map) intensity = Math.min(1, g.strength);
+			else intensity = Math.min(studio ? 1 : 0.35, g.strength * 0.25);
+			m.emissive.set(g.useTexture ? 0xffffff : g.color);
+		} else m.emissive.set(0x000000);
+		m.emissiveIntensity = intensity;
+		if (m.emissiveMap !== map) {
+			if (!m.emissiveMap !== !map) m.needsUpdate = true;
+			m.emissiveMap = map;
+		}
+	}
+
+	syncGlowAll() {
+		for (const m of this.materials()) this.syncGlow(m);
+		this.invalidate();
+	}
+
 	hasGlow() {
-		return this.materials().some((m) => m.emissiveIntensity > 0 && (m.emissive.r + m.emissive.g + m.emissive.b) > 0);
+		return this.materials().some((m) => getGlow(m));
+	}
+
+	glowMaterial(m) {
+		let gm = this.glowMats.get(m);
+		if (!gm) this.glowMats.set(m, (gm = new THREE.MeshBasicMaterial()));
+		const g = getGlow(m);
+		let map = glowMap(m);
+		if (!this.settings.textures && g.useTexture) map = null;
+		if (gm.map !== map) {
+			if (!gm.map !== !map) gm.needsUpdate = true;
+			gm.map = map;
+		}
+		gm.color.set(g.useTexture ? 0xffffff : g.color).multiplyScalar(g.strength * 0.35);
+		gm.alphaTest = m.alphaTest;
+		gm.transparent = m.transparent;
+		gm.opacity = m.opacity;
+		gm.side = m.side;
+		gm.visible = m.visible;
+		return gm;
+	}
+
+	darkMaterial(m) {
+		let dm = this.darkMats.get(m);
+		if (!dm) this.darkMats.set(m, (dm = new THREE.MeshBasicMaterial({ color: 0x000000 })));
+		const map = m.alphaTest > 0 ? m.map : null;
+		if (dm.map !== map) {
+			if (!dm.map !== !map) dm.needsUpdate = true;
+			dm.map = map;
+		}
+		dm.alphaTest = m.alphaTest;
+		dm.side = m.side;
+		dm.visible = m.visible && !m.transparent;
+		return dm;
+	}
+
+	renderBloom() {
+		const swapped = [];
+		const pick = (m) => (getGlow(m) ? this.glowMaterial(m) : this.darkMaterial(m));
+		this.model.traverse((o) => {
+			if (!o.isMesh) return;
+			swapped.push([o, o.material]);
+			o.material = Array.isArray(o.material) ? o.material.map(pick) : pick(o.material);
+		});
+		const hidden = [this.grid, this.ground, this.selectionBox, this.sunMarker, this.sunLine].filter((x) => x.visible);
+		hidden.forEach((x) => (x.visible = false));
+		const bg = this.scene.background;
+		this.scene.background = null;
+		this.renderer.setClearColor(0x000000, 1);
+		this.renderer.setRenderTarget(this.sharpTarget);
+		this.renderer.clear();
+		this.renderer.render(this.scene, this.camera);
+		this.renderer.setRenderTarget(null);
+		this.bloomComposer.render();
+		this.scene.background = bg;
+		hidden.forEach((x) => (x.visible = true));
+		for (const [o, m] of swapped) o.material = m;
 	}
 
 	select(obj) {
@@ -320,8 +428,10 @@ export class Viewer {
 	}
 
 	render() {
-		if (this.hasGlow()) this.composer.render();
-		else this.renderer.render(this.scene, this.camera);
+		if (this.model && this.hasGlow()) {
+			this.renderBloom();
+			this.composer.render();
+		} else this.renderer.render(this.scene, this.camera);
 	}
 
 	screenshot() {

@@ -70,7 +70,7 @@ npm ci
 npm run build          # writes web/dist
 cd ../android
 ./gradlew assembleRelease
-# -> app/build/outputs/apk/release/ModelStudio-1.0.0-release.apk
+# -> app/build/outputs/apk/release/ModelStudio-1.1.0-release.apk
 ```
 
 `npm run dev` in `web/` serves the app at http://localhost:5173 for trying it in a desktop browser

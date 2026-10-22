@@ -39,7 +39,8 @@ export function sampleRobot() {
 	const tex = texture();
 	const body = blockMaterial(tex, 'Robot');
 	body.vertexColors = true;
-	const lamp = new THREE.MeshStandardMaterial({ name: 'Lamp', color: 0xff3b3b, roughness: 0.4, vertexColors: true, emissive: 0xff2020, emissiveIntensity: 3 });
+	const lamp = new THREE.MeshStandardMaterial({ name: 'Lamp', color: 0xff3b3b, roughness: 0.4, vertexColors: true });
+	lamp.userData.glow = { strength: 3, color: '#ff2020', useTexture: false, map: null, colorChosen: true };
 	const bones = [
 		{ name: 'body', parent: null, pivot: [0, 12, 0], rotation: [0, 0, 0], cubes: [{ from: [-4, 12, -2], to: [4, 24, 2], faces: all(R.grey, 0, { south: R.panel }) }] },
 		{ name: 'head', parent: 'body', pivot: [0, 24, 0], rotation: [0, 0, 0], cubes: [{ from: [-4, 24, -4], to: [4, 32, 4], faces: all(R.grey, 0, { south: R.face }) }] },

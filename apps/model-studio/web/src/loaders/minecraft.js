@@ -8,6 +8,7 @@ import {
 	blockMaterial,
 	missingTexture,
 	imageData,
+	hasTranslucency,
 	FACES,
 } from './cuboid.js';
 
@@ -153,7 +154,6 @@ export async function loadJavaModel(json, fileName, files) {
 		if (path) {
 			info = await findTexture(path, files);
 			tex = info ? pixelTexture(info.img, { name: path, frametime: info.frametime }) : missingTexture();
-			if (!info) warnings.push(`Texture "${path}" was not found. Pick the .png together with the model to see it.`);
 		}
 		const mat = blockMaterial(tex, path ? stem(path) : 'untextured');
 		mat.userData.mcTexture = path;
@@ -184,6 +184,8 @@ export async function loadJavaModel(json, fileName, files) {
 			model.add(mesh);
 		}
 	}
+
+	await fillMissingTextures(materials, texInfo, files, warnings);
 
 	root.userData = {
 		source: 'java',
@@ -264,4 +266,33 @@ async function buildGenerated(model, textures, resolveTex, getMaterial, material
 		mesh.name = 'layer' + layer;
 		model.add(mesh);
 	}
+}
+
+// Textures often aren't named the way the model refers to them (Blockbench
+// exports, renamed files). Give unmatched picked images to unmatched textures.
+async function fillMissingTextures(materials, texInfo, files, warnings) {
+	const missing = materials.map((m, i) => i).filter((i) => !texInfo[i] && materials[i].userData.mcTexture);
+	if (!missing.length) return;
+	const used = new Set(texInfo.filter(Boolean).map((t) => t.entry));
+	const spare = files.byExt('png', 'jpg', 'jpeg', 'webp').filter((e) => !used.has(e));
+	const still = [];
+	for (const [n, i] of missing.entries()) {
+		const entry = spare.length === 1 ? spare[0] : spare[n];
+		const ref = materials[i].userData.mcTexture;
+		if (!entry) {
+			still.push(ref);
+			continue;
+		}
+		const img = await loadImage(entry.blob);
+		const mat = materials[i];
+		mat.map = pixelTexture(img, { name: ref });
+		mat.color.set(0xffffff);
+		const { cutout, translucent } = hasTranslucency(img);
+		mat.alphaTest = cutout ? 0.1 : 0;
+		mat.transparent = translucent;
+		mat.needsUpdate = true;
+		texInfo[i] = { img, entry, frametime: 1 };
+		warnings.push(`No file is named like texture "${ref}", so ${entry.name} was used for it.`);
+	}
+	if (still.length) warnings.push(`Missing texture${still.length > 1 ? 's' : ''}: ${still.join(', ')}. Use "Add textures" on the Open tab to pick ${still.length > 1 ? 'them' : 'it'}.`);
 }

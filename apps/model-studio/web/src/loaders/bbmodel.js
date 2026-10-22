@@ -117,6 +117,7 @@ export async function loadBBModel(json, fileName, files) {
 	// Blockbench "java_block" models are authored in 0..16 block space; centre them like Java models.
 	if (json.meta.model_format === 'java_block' || json.meta.model_format === 'free') {
 		for (const child of root.children) child.position.add({ x: -8, y: -8, z: -8 });
+		root.userData.bbOffset = [-8, -8, -8];
 	}
 	const boneByUuid = new Map(bones.filter((b) => b.uuid).map((b) => [b.uuid, b.name]));
 	root.userData.clips = bbAnimationsToClips(json.animations || [], boneByUuid, warnings);

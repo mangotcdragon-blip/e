@@ -11,6 +11,7 @@ import { toMsanim } from '../anim/format.js';
 import { clipsToBedrock, clipsToThree, slug } from '../anim/convert.js';
 import { dataUrlToBlob } from '../fileset.js';
 import { collectMaterials } from '../loaders/index.js';
+import { exportGlow } from '../materials.js';
 
 export const MODEL_FORMATS = [
 	{ id: 'glb', label: 'GLB', desc: 'Best all-round format. Keeps textures, glow and animations in one file.' },
@@ -52,6 +53,7 @@ export async function runExport(formatId, ctx, options = {}) {
 	viewer.settings.textures = true;
 	viewer.settings.wireframe = false;
 	viewer.applySettings();
+	const restoreGlow = exportGlow(collectMaterials(root));
 	try {
 		switch (formatId) {
 			case 'glb':
@@ -88,8 +90,8 @@ export async function runExport(formatId, ctx, options = {}) {
 			case 'mc-java': {
 				const id = slug(name);
 				if (root.userData.source === 'java' && !options.voxel) {
-					const files = await exportJavaOriginal(root, id);
-					return { name: `${id}_java.zip`, blob: zip(files), note: 'Saved as a resource-pack style .zip.' };
+					const { files, notes } = await exportJavaOriginal(root, id);
+					return { name: `${id}_java.zip`, blob: zip(files), note: ['Saved as a resource-pack style .zip.', ...notes].join(' ') };
 				}
 				const { files, elementCount } = await exportJavaVoxel(root, id, options.resolution || 16, options.onProgress);
 				return {
@@ -111,6 +113,7 @@ export async function runExport(formatId, ctx, options = {}) {
 		}
 		throw new Error('Unknown format');
 	} finally {
+		restoreGlow();
 		viewer.settings.faceShade = prevShade;
 		viewer.settings.textures = prevTex;
 		viewer.settings.wireframe = prevWire;

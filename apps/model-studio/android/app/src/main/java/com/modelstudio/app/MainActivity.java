@@ -66,6 +66,8 @@ public class MainActivity extends ComponentActivity {
     private WebView web;
     private ValueCallback<Uri[]> fileCallback;
     private ActivityResultLauncher<Intent> picker;
+    private ActivityResultLauncher<Intent> nativePicker;
+    private String nativePickPurpose = "open";
     private final Map<String, Uri> incoming = new ConcurrentHashMap<>();
     private final Map<String, PendingSave> saves = new ConcurrentHashMap<>();
     private volatile boolean pageReady = false;
@@ -119,6 +121,14 @@ public class MainActivity extends ComponentActivity {
             }
             fileCallback.onReceiveValue(uris);
             fileCallback = null;
+        });
+
+        // Files picked through the bridge are served like shared files, under their real names.
+        nativePicker = registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), result -> {
+            Intent data = result.getData();
+            if (result.getResultCode() != Activity.RESULT_OK || data == null) return;
+            String json = describeUris(urisFrom(data));
+            if (json != null) web.evaluateJavascript("App.receivePicked(" + JSONObject.quote(nativePickPurpose) + ", " + json + ")", null);
         });
 
         WebViewAssetLoader assets = new WebViewAssetLoader.Builder()
@@ -222,8 +232,14 @@ public class MainActivity extends ComponentActivity {
         if (intent == null) return;
         String action = intent.getAction();
         if (!Intent.ACTION_VIEW.equals(action) && !Intent.ACTION_SEND.equals(action) && !Intent.ACTION_SEND_MULTIPLE.equals(action)) return;
-        List<Uri> uris = urisFrom(intent);
-        if (uris.isEmpty()) return;
+        String json = describeUris(urisFrom(intent));
+        if (json != null) deliverIncoming(json);
+        intent.setAction(null);
+    }
+
+    /** Registers the files for /incoming/ and returns [{name, url}] as JSON, or null. */
+    private String describeUris(List<Uri> uris) {
+        if (uris.isEmpty()) return null;
         try {
             JSONArray list = new JSONArray();
             for (Uri uri : uris) {
@@ -235,11 +251,11 @@ public class MainActivity extends ComponentActivity {
                 o.put("url", "https://" + HOST + "/incoming/" + id + "/" + URLEncoder.encode(name, "UTF-8"));
                 list.put(o);
             }
-            deliverIncoming(list.toString());
+            return list.toString();
         } catch (Exception e) {
-            Log.e(TAG, "Could not open shared file", e);
+            Log.e(TAG, "Could not read picked files", e);
+            return null;
         }
-        intent.setAction(null);
     }
 
     private void deliverIncoming(String json) {
@@ -376,6 +392,18 @@ public class MainActivity extends ComponentActivity {
                     pendingIncoming = null;
                     deliverIncoming(json);
                 }
+            });
+        }
+
+        @JavascriptInterface
+        public void pickFiles(String purpose) {
+            runOnUiThread(() -> {
+                nativePickPurpose = purpose == null ? "open" : purpose;
+                Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+                intent.addCategory(Intent.CATEGORY_OPENABLE);
+                intent.setType("*/*");
+                intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
+                nativePicker.launch(intent);
             });
         }
 

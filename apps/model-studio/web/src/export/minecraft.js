@@ -4,38 +4,73 @@ import * as THREE from 'three';
 import { imageData } from '../loaders/cuboid.js';
 import { imageToPng, safeName } from './util.js';
 import { glowStrength } from '../materials.js';
+import { collectMaterials } from '../loaders/index.js';
 
-// Java JSON for a model that was opened from Java JSON: parents flattened, textures bundled.
+// Transform of obj relative to the model root (in pixels for Minecraft models).
+function relTransform(root, obj) {
+	root.updateMatrixWorld(true);
+	const m = new THREE.Matrix4().copy(root.matrixWorld).invert().multiply(obj.matrixWorld);
+	const p = new THREE.Vector3(), q = new THREE.Quaternion(), s = new THREE.Vector3();
+	m.decompose(p, q, s);
+	return { p, q, s };
+}
+
+function partGlow(mesh) {
+	const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+	return Math.max(0, ...mats.map(glowStrength));
+}
+
+const r3 = (v) => Math.round(v * 1000) / 1000;
+
+// Java JSON for a model that was opened from Java JSON: parents flattened,
+// textures bundled, and any moved/turned/resized/hidden parts written back.
 export async function exportJavaOriginal(root, name) {
 	const flat = root.userData.mcFlat;
 	const files = {};
-	const materials = root.userData.materials || [];
 	const textures = { ...flat.textures };
-	// Re-point every texture at a bundled png under the same resource path
-	for (const [i, info] of (root.userData.mcTextures || []).entries()) {
-		const ref = materials[i]?.userData.mcTexture;
-		if (!info || !ref) continue;
+	const notes = [];
+	const written = new Set();
+	for (const m of collectMaterials(root)) {
+		const ref = m.userData.mcTexture;
+		const img = (m.userData.origMap ?? m.map)?.image;
+		if (!ref || !img || written.has(ref) || (m.userData.origMap ?? m.map)?.userData?.missing) continue;
+		written.add(ref);
 		const [ns, path] = ref.includes(':') ? ref.split(':') : ['minecraft', ref];
-		const img = (materials[i].userData.origMap ?? materials[i].map)?.image || info.img;
 		files[`assets/${ns}/textures/${path}.png`] = await imageToPng(img);
 	}
-	const glowFor = new Map(materials.map((m) => [m.userData.mcTexture, glowStrength(m)]));
-	const resolve = (ref) => {
-		for (let i = 0; i < 16 && typeof ref === 'string' && ref.startsWith('#'); i++) ref = textures[ref.slice(1)];
-		return ref;
-	};
-	const elements = (flat.elements || []).map((el) => {
-		const out = structuredClone(el);
-		const glow = Math.max(0, ...Object.values(el.faces || {}).map((f) => glowFor.get(resolve(f.texture)) || 0));
-		if (glow > 0) out.light_emission = Math.min(15, Math.round(glow * 3));
-		return out;
+	const elements = [];
+	root.traverse((mesh) => {
+		const i = mesh.userData.elementIndex;
+		if (i === undefined || !mesh.isMesh) return;
+		let visible = true;
+		for (let o = mesh; o && o !== root; o = o.parent) visible &&= o.visible;
+		if (!visible) return;
+		const el = structuredClone(flat.elements[i]);
+		const orig = mesh.userData.orig;
+		const { p, q, s } = relTransform(root, mesh);
+		const origin = [p.x + 8, p.y + 8, p.z + 8];
+		const o0 = el.rotation?.origin || [8, 8, 8];
+		const k = [s.x / (orig?.s.x || 1), s.y / (orig?.s.y || 1), s.z / (orig?.s.z || 1)];
+		el.from = el.from.map((v, a) => r3(origin[a] + (v - o0[a]) * k[a]));
+		el.to = el.to.map((v, a) => r3(origin[a] + (v - o0[a]) * k[a]));
+		const e = new THREE.Euler().setFromQuaternion(q, 'XYZ');
+		const angles = { x: e.x, y: e.y, z: e.z };
+		const turned = Object.entries(angles).filter(([, v]) => Math.abs(v) > 1e-4);
+		if (turned.length) {
+			if (turned.length > 1) notes.push(`"${mesh.name}" is turned on more than one axis; Minecraft only allows one, so only the biggest turn was kept.`);
+			const [axis, rad] = turned.sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]))[0];
+			el.rotation = { origin: origin.map(r3), axis, angle: r3(THREE.MathUtils.radToDeg(rad)), ...(el.rotation?.rescale ? { rescale: true } : {}) };
+		} else delete el.rotation;
+		const glow = partGlow(mesh);
+		if (glow > 0) el.light_emission = Math.min(15, Math.round(glow * 3));
+		elements.push(el);
 	});
 	const model = { credit: 'Made with Model Studio', textures };
 	if (flat.display) model.display = flat.display;
 	if (elements.length) model.elements = elements;
 	else model.parent = 'item/generated';
 	files[`assets/minecraft/models/${elements.length ? 'block' : 'item'}/${name}.json`] = JSON.stringify(model, null, '\t');
-	return files;
+	return { files, notes };
 }
 
 // Turn any model into Minecraft Java cubes by voxelising its surface.
@@ -212,36 +247,70 @@ export async function exportJavaVoxel(root, name, resolution = 16, onProgress) {
 	};
 }
 
-// Bedrock geometry from a box-based model (Bedrock, Blockbench).
+// Bedrock geometry from a box-based model (Bedrock, Blockbench), including
+// any parts that were moved, turned, resized or hidden.
 export async function exportBedrockGeo(root, name) {
 	const bones = root.userData.bones;
 	if (!bones) throw new Error('Only box-based models (Bedrock, Blockbench) can be saved as Bedrock geometry.');
 	const geoInfo = root.userData.geo || { tw: 64, th: 64 };
+	const off = root.userData.bbOffset || [0, 0, 0];
 	const flip = (v) => [-v[0], v[1], v[2]];
 	const flipR = (v) => [-v[0], -v[1], v[2]];
-	const r = (v) => Math.round(v * 1000) / 1000;
+	const r = r3;
+	const R2D = THREE.MathUtils.radToDeg;
+	const groups = new Map();
+	root.traverse((o) => o.userData.geoBone && groups.set(o.userData.geoBone, o));
+	// Bedrock pivots are in model space and ignore parent rotations, like the bones' offsets here.
+	const pivotOf = (g) => {
+		const parent = g.parent?.userData.geoBone ? g.parent : null;
+		const base = parent ? pivotOf(parent) : [-off[0], -off[1], -off[2]];
+		return [base[0] + g.position.x, base[1] + g.position.y, base[2] + g.position.z];
+	};
 	const outBones = bones.map((b) => {
-		const bone = { name: b.name, pivot: flip(b.pivot).map(r) };
+		const g = groups.get(b);
+		const pivot = g ? pivotOf(g) : b.pivot;
+		const e = g ? new THREE.Euler().setFromQuaternion(g.quaternion, 'ZYX') : null;
+		const rot = e ? [R2D(e.x), R2D(e.y), R2D(e.z)] : b.rotation || [0, 0, 0];
+		const bone = { name: b.name, pivot: flip(pivot).map(r) };
 		if (b.parent) bone.parent = b.parent;
-		if (b.rotation?.some((x) => x)) bone.rotation = flipR(b.rotation).map(r);
-		if (b.cubes.length)
-			bone.cubes = b.cubes.map((c) => {
-				const size = c.to.map((x, i) => x - c.from[i]);
-				const cube = { origin: [-c.to[0], c.from[1], c.from[2]].map(r), size: size.map(r) };
-				if (c.inflate) cube.inflate = c.inflate;
-				if (c.rotation) {
-					cube.pivot = flip(c.pivot).map(r);
-					cube.rotation = flipR(c.rotation).map(r);
-				}
-				cube.uv = {};
-				for (const [dir, f] of Object.entries(c.faces)) {
-					const rect = Array.isArray(f) ? f : f.uv;
-					const sx = Array.isArray(f) || !f.tw ? 1 : geoInfo.tw / f.tw;
-					const sy = Array.isArray(f) || !f.th ? 1 : geoInfo.th / f.th;
-					cube.uv[dir] = { uv: [r(rect[0] * sx), r(rect[1] * sy)], uv_size: [r((rect[2] - rect[0]) * sx), r((rect[3] - rect[1]) * sy)] };
-				}
-				return cube;
-			});
+		if (rot.some((x) => Math.abs(x) > 1e-4)) bone.rotation = flipR(rot).map(r);
+		const cubes = [];
+		g?.traverse((mesh) => {
+			const c = mesh.userData.cube;
+			if (!c || !mesh.isMesh) return;
+			let visible = true;
+			for (let o = mesh; o && o !== root; o = o.parent) visible &&= o.visible;
+			if (!visible) return;
+			// Moves/resizes of the cube itself, plus resizes of its bone, measured around the bone pivot
+			const orig = mesh.userData.orig;
+			const dp = orig ? mesh.position.clone().sub(orig.p) : new THREE.Vector3();
+			const ws = new THREE.Vector3(1, 1, 1);
+			for (let o = mesh; o && o !== g.parent; o = o.parent) {
+				const os = o.userData.orig?.s;
+				if (os) ws.multiply(new THREE.Vector3(o.scale.x / (os.x || 1), o.scale.y / (os.y || 1), o.scale.z / (os.z || 1)));
+			}
+			const k = ws.toArray();
+			// Cubes are stored in model space, so they also follow their bone's pivot when it moves
+			const d = dp.toArray().map((v, a) => v + pivot[a] - b.pivot[a]);
+			const from = c.from.map((v, a) => b.pivot[a] + (v - b.pivot[a]) * k[a] + d[a]);
+			const to = c.to.map((v, a) => b.pivot[a] + (v - b.pivot[a]) * k[a] + d[a]);
+			const size = to.map((x, i) => x - from[i]);
+			const cube = { origin: [-to[0], from[1], from[2]].map(r), size: size.map(r) };
+			if (c.inflate) cube.inflate = c.inflate;
+			if (c.rotation) {
+				cube.pivot = flip(c.pivot).map(r);
+				cube.rotation = flipR(c.rotation).map(r);
+			}
+			cube.uv = {};
+			for (const [dir, f] of Object.entries(c.faces)) {
+				const rect = Array.isArray(f) ? f : f.uv;
+				const sx = Array.isArray(f) || !f.tw ? 1 : geoInfo.tw / f.tw;
+				const sy = Array.isArray(f) || !f.th ? 1 : geoInfo.th / f.th;
+				cube.uv[dir] = { uv: [r(rect[0] * sx), r(rect[1] * sy)], uv_size: [r((rect[2] - rect[0]) * sx), r((rect[3] - rect[1]) * sy)] };
+			}
+			cubes.push(cube);
+		});
+		if (cubes.length) bone.cubes = cubes;
 		return bone;
 	});
 	const geo = {
@@ -255,8 +324,8 @@ export async function exportBedrockGeo(root, name) {
 	};
 	const files = { [`${name}.geo.json`]: JSON.stringify(geo, null, '\t') };
 	const mat = root.userData.materials?.[0];
-	const img = (mat?.userData.origMap ?? mat?.map)?.image;
-	if (img && !(mat.map?.userData?.missing)) files[`${name}.png`] = await imageToPng(img);
+	const tex = mat?.userData.origMap ?? mat?.map;
+	if (tex?.image && !tex.userData?.missing) files[`${name}.png`] = await imageToPng(tex.image);
 	return files;
 }
 

@@ -18,6 +18,7 @@ import { isBedrockGeo, loadBedrockGeo } from './bedrock.js';
 import { isBBModel, loadBBModel } from './bbmodel.js';
 import { isMsanim, fromMsanim } from '../anim/format.js';
 import { isBedrockAnimation, bedrockToClips } from '../anim/convert.js';
+import { emissiveToGlow } from '../materials.js';
 
 export const MODEL_EXTS = ['glb', 'gltf', 'obj', 'fbx', 'stl', 'ply', 'dae', '3mf', '3ds', 'vox', 'json', 'geo.json', 'bbmodel'];
 export const ANIM_EXTS = ['msanim', 'animation.json'];
@@ -222,12 +223,15 @@ export function prepareModel(root) {
 		}
 	});
 	let i = 1;
-	for (const m of collectMaterials(root)) if (!m.name) m.name = `Material ${i++}`;
+	for (const m of collectMaterials(root)) {
+		if (!m.name) m.name = `Material ${i++}`;
+		if (!m.userData.glow) emissiveToGlow(m);
+	}
 }
 
 // userData keys the app uses for its own bookkeeping (kept out of glTF files in export/index.js)
-export const APP_MATERIAL_KEYS = ['origMap', 'original', 'glowUsesTexture', 'wireframe', 'mcTexture'];
-export const APP_OBJECT_KEYS = ['mcBone', 'geoBone', 'elementIndex'];
+export const APP_MATERIAL_KEYS = ['origMap', 'original', 'glow', 'wireframe', 'mcTexture'];
+export const APP_OBJECT_KEYS = ['mcBone', 'geoBone', 'elementIndex', 'cube', 'orig'];
 
 export function collectMaterials(root) {
 	const set = new Set();

@@ -124,6 +124,7 @@ export function buildBoneModel(bones, materials, tw, th, name) {
 			builder.addBox(c.from.map((x, i) => x - pivot[i]), c.to.map((x, i) => x - pivot[i]), faces, { inflate: c.inflate });
 			const mesh = new THREE.Mesh(builder.build(), materials);
 			mesh.name = c.name || `${b.name}_cube${ci}`;
+			mesh.userData.cube = c;
 			if (c.rotation) {
 				const holder = new THREE.Group();
 				holder.name = mesh.name + '_pivot';

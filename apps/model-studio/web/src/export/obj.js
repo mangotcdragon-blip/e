@@ -1,6 +1,7 @@
 // OBJ + MTL export that keeps materials and textures (three's OBJExporter writes geometry only).
 import * as THREE from 'three';
 import { imageToPng, safeName } from './util.js';
+import { getGlow } from '../materials.js';
 
 export async function exportOBJ(root, name) {
 	const lines = [`# Exported by Model Studio`, `mtllib ${name}.mtl`];
@@ -18,8 +19,9 @@ export async function exportOBJ(root, name) {
 		matNames.set(m, n);
 		const c = m.color || new THREE.Color(1, 1, 1);
 		mtl.push('', `newmtl ${n}`, `Kd ${c.r.toFixed(4)} ${c.g.toFixed(4)} ${c.b.toFixed(4)}`, `Ka 0 0 0`, `d ${m.opacity ?? 1}`);
-		if (m.emissive && m.emissiveIntensity > 0) {
-			const e = m.emissive.clone().multiplyScalar(Math.min(m.emissiveIntensity, 1));
+		const glow = getGlow(m);
+		if (glow) {
+			const e = new THREE.Color(glow.useTexture ? 0xffffff : glow.color).multiplyScalar(Math.min(glow.strength, 1));
 			mtl.push(`Ke ${e.r.toFixed(4)} ${e.g.toFixed(4)} ${e.b.toFixed(4)}`);
 		}
 		const tex = m.userData.origMap ?? m.map;

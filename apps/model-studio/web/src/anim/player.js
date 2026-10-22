@@ -30,6 +30,12 @@ export class AnimPlayer {
 		});
 	}
 
+	// Make the object's current transform its new rest pose (after editing a part).
+	setRest(obj) {
+		const e = new THREE.Euler().setFromQuaternion(obj.quaternion, 'ZYX');
+		this.rest.set(obj, { p: obj.position.clone(), q: obj.quaternion.clone(), s: obj.scale.clone(), e: [R2D(e.x), R2D(e.y), R2D(e.z)] });
+	}
+
 	find(name) {
 		return this.byName?.get(name) || null;
 	}

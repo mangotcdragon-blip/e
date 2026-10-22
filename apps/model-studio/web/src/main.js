@@ -76,6 +76,8 @@ const fileInput = $('#file-input');
 let pickPurpose = 'open';
 function pickFiles(purpose = 'open') {
 	pickPurpose = purpose;
+	// On Android the app's own picker passes real file names (texture matching depends on them)
+	if (window.AndroidBridge?.pickFiles) return window.AndroidBridge.pickFiles(purpose);
 	fileInput.value = '';
 	fileInput.click();
 }
@@ -91,24 +93,11 @@ async function openFiles(fileList, purpose = 'open') {
 		const { modelEntry, animEntries, images } = await classify(files);
 		const warnings = [];
 
-		if (purpose === 'texture' || (!modelEntry && !animEntries.length && images.length)) {
+		if (purpose === 'texture' || purpose === 'replace' || (!modelEntry && !animEntries.length && images.length)) {
 			if (!viewer.model) throw new Error('Open a model first, then add a texture to one of its materials.');
 			if (!images.length) throw new Error('Pick a picture file (PNG, JPG or WebP) to use as the texture.');
-			const mat = state.material || viewer.materials()[0];
-			if (!mat) throw new Error('This model has no materials.');
-			const img = await loadImage(images[0].blob);
-			const old = mat.userData.origMap ?? mat.map;
-			const tex = textureFromImage(img, images[0].name, Math.max(img.width, img.height) <= 256);
-			if (old) {
-				tex.flipY = old.flipY;
-				tex.repeat.copy(old.repeat);
-				tex.offset.copy(old.offset);
-				tex.userData = { ...old.userData, missing: false };
-			}
-			snapshot(mat);
-			viewer.setMaterialMap(mat, tex);
-			mat.color.set(0xffffff);
-			toast(`Texture applied to "${mat.name}"`);
+			const applied = await applyTextures(images, purpose === 'replace' ? state.material : null);
+			toast(applied.join(' · '));
 			showPanel('material');
 			return;
 		}
@@ -153,12 +142,48 @@ async function openFiles(fileList, purpose = 'open') {
 	}
 }
 
+// Put picked pictures onto the model: by matching name to a texture the model
+// is missing (or a material's name), otherwise onto the selected material.
+async function applyTextures(images, only = null) {
+	const mats = viewer.materials();
+	const key = (n) => String(n || '').toLowerCase().split(/[/:]/).pop().replace(/\.(png|jpe?g|webp|tga)$/, '');
+	const missing = mats.filter((m) => !(m.userData.origMap ?? m.map) || (m.userData.origMap ?? m.map)?.userData?.missing);
+	const done = [];
+	for (const entry of images) {
+		const want = key(entry.name);
+		let targets = only ? [only] : mats.filter((m) => key(m.userData.mcTexture) === want || key((m.userData.origMap ?? m.map)?.name) === want || key(m.name) === want);
+		if (!targets.length && images.length === 1) targets = state.material ? [state.material] : missing.length ? missing : mats.slice(0, 1);
+		if (!targets.length && missing.length) targets = [missing.shift()];
+		if (!targets.length) continue;
+		const img = await loadImage(entry.blob);
+		for (const mat of targets) {
+			const old = mat.userData.origMap ?? mat.map;
+			const tex = textureFromImage(img, entry.name, Math.max(img.width, img.height) <= 256);
+			if (old && !old.userData?.missing) {
+				tex.flipY = old.flipY;
+				tex.repeat.copy(old.repeat);
+				tex.offset.copy(old.offset);
+				tex.userData = { ...old.userData };
+			}
+			snapshot(mat);
+			viewer.setMaterialMap(mat, tex);
+			mat.color.set(0xffffff);
+		}
+		done.push(`${entry.name} \u2192 ${targets.map((m) => m.name).join(', ')}`);
+	}
+	if (!done.length) throw new Error('Could not tell which part those pictures belong to. Select a material in the Look tab first.');
+	viewer.syncGlowAll();
+	return done;
+}
+
 function setModel(root) {
 	state.playing = false;
 	viewer.setModel(root);
 	player.setModel(root);
 	state.material = null;
 	state.bone = null;
+	state.part = null;
+	root?.traverse((o) => (o.userData.orig = { p: o.position.clone(), q: o.quaternion.clone(), s: o.scale.clone() }));
 	$('#empty').classList.toggle('hidden', !!root);
 	$('#title').textContent = root ? root.userData.fileName || root.name : 'Model Studio';
 	for (const m of collectMaterials(root)) snapshot(m);
@@ -238,6 +263,7 @@ function updateHud() {
 
 const PANELS = {
 	open: { title: 'Open', icon: ICONS.open, render: renderOpenPanel },
+	parts: { title: 'Parts', icon: ICONS.parts, render: renderPartsPanel },
 	material: { title: 'Look', icon: ICONS.material, render: renderMaterialPanel },
 	light: { title: 'Light', icon: ICONS.light, render: renderLightPanel },
 	animate: { title: 'Animate', icon: ICONS.animate, render: renderAnimatePanel },
@@ -254,6 +280,8 @@ function buildTabs() {
 
 let panelOptions = {};
 function showPanel(id, options = {}) {
+	if (id !== state.panel && (id === 'parts' || id === 'animate')) stopForEditing();
+	if (id !== 'parts' && id !== 'animate') viewer.select(null);
 	state.panel = id;
 	panelOptions = options;
 	const sheet = $('#sheet');
@@ -273,6 +301,7 @@ function showPanel(id, options = {}) {
 
 function hidePanel() {
 	state.panel = null;
+	viewer.select(null);
 	$('#sheet').classList.remove('open');
 	document.body.classList.remove('sheet-open');
 	document.querySelectorAll('.tab').forEach((t) => t.classList.remove('active'));
@@ -296,6 +325,7 @@ function renderOpenPanel() {
 				pickFiles('open');
 			}, { kind: 'big', icon: ICONS.save }),
 			button('Add animation', () => pickFiles('anim'), { kind: 'big', icon: ICONS.animate, disabled: !root }),
+			button('Add textures', () => pickFiles('texture'), { kind: 'big', icon: ICONS.material, disabled: !root }),
 			button('Try sample', loadSample, { kind: 'big', icon: ICONS.cube }),
 		),
 		hint('Tip: select the model together with its textures (or a whole resource-pack .zip) so everything is found.'),
@@ -349,6 +379,194 @@ function needModel() {
 	return h('div', { class: 'empty-panel' }, hint('Open a model first.'), button('Open 3D file', () => pickFiles('open'), { kind: 'primary', icon: ICONS.open }), button('Try sample', loadSample, { icon: ICONS.cube }));
 }
 
+// ---- Parts
+
+// Editing a part's pose while an animation has moved it would bake the animation in.
+function stopForEditing() {
+	if (state.panel === 'parts' || !viewer.model) return;
+	state.playing = false;
+	player.resetPose();
+	viewer.invalidate();
+	updateHud();
+}
+
+// Bone models select whole bones; everything else selects the tapped piece.
+function defaultPartFor(obj) {
+	for (let o = obj; o && o !== viewer.model; o = o.parent) if (o.userData.mcBone) return o;
+	return obj;
+}
+
+function partList() {
+	const out = [];
+	const walk = (o, depth) => {
+		for (const c of o.children) {
+			if (!c.isObject3D || c.isLight || c.isCamera || (c.isBone && !c.name)) continue;
+			if (!c.name.endsWith('_pivot')) out.push({ obj: c, depth });
+			walk(c, c.name.endsWith('_pivot') ? depth : depth + 1);
+		}
+	};
+	walk(viewer.model, 0);
+	return out;
+}
+
+function partMeshes(obj) {
+	const meshes = [];
+	obj.traverse((o) => o.isMesh && meshes.push(o));
+	return meshes;
+}
+
+function usedMaterials(mesh) {
+	const list = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+	if (!Array.isArray(mesh.material)) return list;
+	const idx = new Set(mesh.geometry.groups.length ? mesh.geometry.groups.map((g) => g.materialIndex ?? 0) : [0]);
+	return [...idx].map((i) => list[i]).filter(Boolean);
+}
+
+function partMaterials(obj) {
+	return [...new Set(partMeshes(obj).flatMap(usedMaterials))];
+}
+
+// Give a part its own copies of any materials it shares with the rest of the
+// model, so its glow/colour can change without touching other parts.
+function ownMaterials(obj) {
+	const inside = new Set(partMeshes(obj));
+	const users = new Map();
+	viewer.model.traverse((o) => {
+		if (!o.isMesh) return;
+		for (const m of usedMaterials(o)) (users.get(m) || users.set(m, new Set()).get(m)).add(o);
+	});
+	const copies = new Map();
+	for (const mesh of inside) {
+		const isArray = Array.isArray(mesh.material);
+		const list = isArray ? mesh.material.slice() : [mesh.material];
+		let changed = false;
+		for (const m of usedMaterials(mesh)) {
+			if (![...users.get(m)].some((u) => !inside.has(u))) continue;
+			if (!copies.has(m)) {
+				const c = m.clone();
+				c.userData = { ...m.userData, glow: m.userData.glow ? { ...m.userData.glow } : null };
+				c.name = `${m.name} (${obj.name})`;
+				copies.set(m, c);
+			}
+			list[list.indexOf(m)] = copies.get(m);
+			changed = true;
+		}
+		if (changed) mesh.material = isArray ? list : list[0];
+	}
+	if (copies.size) viewer.applySettings();
+	return partMaterials(obj);
+}
+
+const D2R = THREE.MathUtils.degToRad, R2D = THREE.MathUtils.radToDeg;
+
+function renderPartsPanel() {
+	if (!viewer.model) return needModel();
+	const parts = partList();
+	if (!parts.length) return [hint('This model is a single piece, so there are no separate parts to pick.')];
+	if (state.part && !parts.some((p) => p.obj === state.part)) state.part = null;
+	const obj = state.part;
+	viewer.select(obj);
+	const out = [
+		hint(obj ? '' : 'Tap a part of the model to select it, or pick one from the list.'),
+		select({
+			options: [{ value: '', label: '— choose a part —' }, ...parts.map((p, i) => ({ value: String(i), label: '  '.repeat(p.depth) + p.obj.name }))],
+			value: obj ? String(parts.findIndex((p) => p.obj === obj)) : '',
+			onChange: (v) => ((state.part = v === '' ? null : parts[+v].obj), refresh()),
+		}),
+	];
+	if (!obj) return out;
+
+	// Bigger / smaller part shortcuts
+	const chain = [];
+	for (let o = obj.parent; o && o !== viewer.model; o = o.parent) if (!o.name.endsWith('_pivot')) chain.push(o);
+	const kids = obj.children.flatMap((c) => (c.name.endsWith('_pivot') ? c.children : [c])).filter((c) => c.name);
+	if (chain.length || kids.length)
+		out.push(h('div', { class: 'sub' }, h('span', { class: 'label' }, 'Also select'),
+			h('div', { class: 'chips scroll' },
+				chain.slice(0, 3).map((o) => h('button', { type: 'button', class: 'chip', onClick: () => ((state.part = o), refresh()) }, `↑ ${o.name}`)),
+				kids.slice(0, 12).map((o) => h('button', { type: 'button', class: 'chip', onClick: () => ((state.part = o), refresh()) }, `↓ ${o.name}`)),
+			)));
+
+	const orig = obj.userData.orig || { p: obj.position.clone(), q: obj.quaternion.clone(), s: obj.scale.clone() };
+	const changed = () => {
+		player.setRest(obj);
+		viewer.invalidate();
+	};
+	const parentScale = obj.parent.getWorldScale(new THREE.Vector3()).x || 1;
+	const range = Math.max(1, Math.ceil((viewer.radius / parentScale) * 1.5));
+	const euler = new THREE.Euler().setFromQuaternion(obj.quaternion, 'ZYX');
+	const move = ['x', 'y', 'z'].map((a) => slider({ label: `Move ${a.toUpperCase()}`, min: -range, max: range, step: range / 400, value: obj.position[a] - orig.p[a], format: (v) => round(v, 0.01), onInput: (v) => ((obj.position[a] = orig.p[a] + v), changed()) }));
+	const turn = ['x', 'y', 'z'].map((a) => slider({ label: `Turn ${a.toUpperCase()}`, min: -180, max: 180, step: 1, value: Math.round(R2D(euler[a])), format: (v) => `${Math.round(v)}°`, onInput: (v) => {
+		const e = new THREE.Euler().setFromQuaternion(obj.quaternion, 'ZYX');
+		e[a] = D2R(v);
+		obj.quaternion.setFromEuler(e);
+		changed();
+	} }));
+	const rel = (a) => obj.scale[a] / (orig.s[a] || 1);
+	const sizeAxes = ['x', 'y', 'z'].map((a) => slider({ label: `Size ${a.toUpperCase()}`, min: 0.05, max: 4, step: 0.01, value: rel(a), format: (v) => `${Math.round(v * 100)}%`, onInput: (v) => ((obj.scale[a] = orig.s[a] * v), changed()) }));
+	const size = slider({ label: 'Size (all)', min: 0.05, max: 4, step: 0.01, value: (rel('x') + rel('y') + rel('z')) / 3, format: (v) => `${Math.round(v * 100)}%`, onInput: (v) => {
+		for (const [i, a] of ['x', 'y', 'z'].entries()) {
+			obj.scale[a] = orig.s[a] * v;
+			sizeAxes[i].set(v);
+		}
+		changed();
+	} });
+	out.push(
+		section('Move', ...move),
+		section('Turn', ...turn),
+		section('Size', size, ...sizeAxes),
+	);
+
+	// Look of this part only
+	const mats = partMaterials(obj);
+	const first = mats[0];
+	const glowNow = first ? glowStrength(first) : 0;
+	const setPartGlow = (opts) => {
+		for (const m of ownMaterials(obj)) setGlow(m, opts);
+		viewer.syncGlowAll();
+	};
+	out.push(
+		section(obj.children.length && partMeshes(obj).length > 1 ? 'Glow (this part and what\u2019s attached to it)' : 'Glow (this part only)',
+			chips({ options: GLOW_PRESETS.map((p) => ({ value: p.strength, label: p.label })), value: GLOW_PRESETS.find((p) => Math.abs(p.strength - glowNow) < 0.01)?.strength, onChange: (v) => (setPartGlow({ strength: v }), refresh()) }),
+			slider({ label: 'Glow strength', min: 0, max: 10, step: 0.1, value: glowNow, onInput: (v) => setPartGlow({ strength: v }) }),
+			colorRow({ label: 'Glow colour', value: first ? glowColor(first) : '#ffffff', swatches: COLOR_SWATCHES, onChange: (c) => setPartGlow({ color: c, strength: glowNow || 2 }) }),
+			mats.some((m) => m.userData.origMap ?? m.map) ? toggle({ label: 'Glow in the texture’s colours', value: !!first?.userData.glow?.useTexture, onChange: (v) => (setPartGlow({ useTexture: v, strength: glowStrength(first) || 2 }), refresh()) }) : null,
+		),
+		section('Colour (this part only)',
+			colorRow({ label: 'Tint', value: first ? '#' + first.color.getHexString() : '#ffffff', swatches: COLOR_SWATCHES, onChange: (c) => {
+				for (const m of ownMaterials(obj)) m.color.set(c);
+				viewer.invalidate();
+			} }),
+			toggle({ label: 'Show this part', value: obj.visible, onChange: (v) => ((obj.visible = v), viewer.invalidate()) }),
+		),
+		h('div', { class: 'row-buttons' },
+			button('Reset this part', () => {
+				obj.position.copy(orig.p);
+				obj.quaternion.copy(orig.q);
+				obj.scale.copy(orig.s);
+				obj.visible = true;
+				changed();
+				refresh();
+			}, { kind: 'ghost', icon: ICONS.reset }),
+			button('Reset all parts', async () => {
+				if (!(await confirm('Put every part back where it was when the file was opened?', 'Reset'))) return;
+				viewer.model.traverse((o) => {
+					const r = o.userData.orig;
+					if (!r || o === viewer.model) return;
+					o.position.copy(r.p);
+					o.quaternion.copy(r.q);
+					o.scale.copy(r.s);
+					o.visible = true;
+					player.setRest(o);
+				});
+				viewer.invalidate();
+				refresh();
+			}, { kind: 'ghost' }),
+		),
+	);
+	return out;
+}
+
 // ---- Look (materials)
 
 viewer.on('pick', (hit) => {
@@ -364,11 +582,21 @@ viewer.on('pick', (hit) => {
 		}
 		return;
 	}
-	if (!hit) return;
-	state.material = hit.material;
-	flashSelection(hit.object);
-	if (state.panel === 'material') refresh();
-	else showPanel('material');
+	if (state.panel === 'material') {
+		if (!hit) return;
+		state.material = hit.material;
+		flashSelection(hit.object);
+		refresh();
+		return;
+	}
+	// Anywhere else a tap selects the part under your finger
+	if (!hit) {
+		if (state.panel === 'parts') (state.part = null), viewer.select(null), refresh();
+		return;
+	}
+	state.part = defaultPartFor(hit.object);
+	viewer.select(state.part);
+	showPanel('parts');
 });
 
 function flashSelection(obj) {
@@ -404,16 +632,17 @@ function renderMaterialPanel() {
 			h('div', { class: 'tex-row' },
 				tex?.image ? h('img', { class: 'tex-thumb', src: thumb(tex.image) }) : h('div', { class: 'tex-thumb none' }, 'none'),
 				h('div', { class: 'stack' },
-					button(tex ? 'Replace texture' : 'Add texture', () => pickFiles('texture'), { kind: 'small' }),
+					button(tex ? 'Replace texture' : 'Add texture', () => pickFiles('replace'), { kind: 'small' }),
 					tex ? button('Remove texture', () => (viewer.setMaterialMap(m, null), refresh()), { kind: 'small ghost' }) : null,
 				),
 			),
 		),
-		section('Glow',
-			chips({ options: GLOW_PRESETS.map((p) => ({ value: p.strength, label: p.label })), value: GLOW_PRESETS.find((p) => Math.abs(p.strength - glowStrength(m)) < 0.01)?.strength, onChange: (v) => (setGlow(m, { strength: v }), viewer.invalidate(), refresh()) }),
-			slider({ label: 'Glow strength', min: 0, max: 10, step: 0.1, value: glowStrength(m), onInput: (v) => (setGlow(m, { strength: v }), viewer.invalidate()) }),
-			colorRow({ label: 'Glow colour', value: glowColor(m), swatches: COLOR_SWATCHES, onChange: (c) => (setGlow(m, { color: c, strength: glowStrength(m) || 2 }), viewer.invalidate()) }),
-			tex ? toggle({ label: 'Glow uses texture colours', hint: 'Like Minecraft emissive textures', value: !!m.userData.glowUsesTexture, onChange: (v) => (setGlow(m, { useTexture: v }), viewer.invalidate(), refresh()) }) : null,
+		section('Glow (everywhere this material is used)',
+			hint('To make just one part glow, tap it and use the Parts tab.'),
+			chips({ options: GLOW_PRESETS.map((p) => ({ value: p.strength, label: p.label })), value: GLOW_PRESETS.find((p) => Math.abs(p.strength - glowStrength(m)) < 0.01)?.strength, onChange: (v) => (setGlow(m, { strength: v }), viewer.syncGlowAll(), refresh()) }),
+			slider({ label: 'Glow strength', min: 0, max: 10, step: 0.1, value: glowStrength(m), onInput: (v) => (setGlow(m, { strength: v }), viewer.syncGlowAll()) }),
+			colorRow({ label: 'Glow colour', value: glowColor(m), swatches: COLOR_SWATCHES, onChange: (c) => (setGlow(m, { color: c, strength: glowStrength(m) || 2 }), viewer.syncGlowAll()) }),
+			tex ? toggle({ label: 'Glow in the texture\u2019s colours', hint: 'Like Minecraft emissive textures', value: !!m.userData.glow?.useTexture, onChange: (v) => (setGlow(m, { useTexture: v, strength: glowStrength(m) || 2 }), viewer.syncGlowAll(), refresh()) }) : null,
 		),
 		section('Surface',
 			slider({ label: 'Metal', min: 0, max: 1, step: 0.01, value: m.metalness, format: pct, onInput: (v) => set(() => (m.metalness = v)) }),
@@ -429,7 +658,7 @@ function renderMaterialPanel() {
 				const n = await prompt('Material name', m.name);
 				if (n) (m.name = n), refresh();
 			}, { kind: 'ghost' }),
-			button('Reset material', () => (resetMaterial(m, viewer), refresh()), { kind: 'ghost', icon: ICONS.reset }),
+			button('Reset material', () => (resetMaterial(m, viewer), viewer.syncGlowAll(), refresh()), { kind: 'ghost', icon: ICONS.reset }),
 		),
 	);
 	return out;
@@ -561,6 +790,19 @@ function renderAnimatePanelBody() {
 			),
 		);
 		parts.push(renderBoneEditor(c));
+	} else {
+		parts.push(
+			h('div', { class: 'empty-panel' },
+				button('Start a new animation', () => {
+					state.clips.push(newClip('animation_1', 2));
+					state.clipIndex = state.clips.length - 1;
+					setTime(0);
+					renderAnimatePanelBody();
+					updateHud();
+				}, { kind: 'primary big', icon: ICONS.plus }),
+				hint('Then tap a part and move the sliders; each change is saved as a keyframe. To just pose or resize parts without animating, use the Parts tab.'),
+			),
+		);
 	}
 	animBody.replaceChildren(...parts);
 	renderAnimTransport();
@@ -835,6 +1077,13 @@ window.App = {
 			return true;
 		}
 		return false;
+	},
+	async receivePicked(purpose, list) {
+		try {
+			openFiles(await fetchIncoming(list), purpose);
+		} catch (err) {
+			toast(err.message, 'error');
+		}
 	},
 	async openIncoming(list) {
 		try {
