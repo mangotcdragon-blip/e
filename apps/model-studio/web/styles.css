@@ -188,3 +188,9 @@ input[type=range]::-moz-range-thumb { width: 22px; height: 22px; border-radius: 
 .dialog p { margin: 0 0 12px; }
 .dialog input { width: 100%; padding: 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel-2); }
 .dialog-buttons { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+
+.gizmo-bar { margin: 6px 0 4px; }
+.gizmo-bar .chips .chip { flex: 1; justify-content: center; min-height: 48px; font-weight: 600; }
+details.exact { border-bottom: 1px solid var(--line); }
+details.exact > summary { min-height: 48px; display: flex; align-items: center; color: var(--muted); font-weight: 600; cursor: pointer; }
+details.exact[open] > summary { color: var(--text); }

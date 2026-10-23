@@ -1,6 +1,7 @@
 // The 3D view: renderer, camera, touch controls, lighting, glow and helpers.
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
@@ -57,6 +58,7 @@ export class Viewer {
 		controls.dampingFactor = 0.12;
 		controls.screenSpacePanning = true;
 		controls.addEventListener('change', () => this.invalidate());
+		controls.addEventListener('start', () => (this.cameraMoved = true));
 
 		this.ambient = new THREE.AmbientLight(0xffffff, FLAT);
 		this.sun = new THREE.DirectionalLight(0xffffff, 2.5);
@@ -122,6 +124,18 @@ export class Viewer {
 		this.needsRender = true;
 		this.frameHooks = [];
 
+		// On-model Move / Rotate / Scale handles for the selected part
+		const gizmo = (this.gizmo = new TransformControls(this.camera, renderer.domElement));
+		gizmo.setSize(1.8);
+		gizmo.setSpace('local');
+		this.gizmoHelper = gizmo.getHelper();
+		this.scene.add(this.gizmoHelper);
+		gizmo.addEventListener('change', () => this.invalidate());
+		gizmo.addEventListener('dragging-changed', (e) => (controls.enabled = !e.value));
+		gizmo.addEventListener('mouseDown', () => (this.gizmoUsed = true));
+		gizmo.addEventListener('objectChange', () => this.emit('gizmoChange', gizmo.object, gizmo.mode));
+		gizmo.addEventListener('mouseUp', () => this.emit('gizmoEnd', gizmo.object, gizmo.mode));
+
 		this.setupPicking();
 		new ResizeObserver(() => this.resize()).observe(container);
 		this.resize();
@@ -154,6 +168,7 @@ export class Viewer {
 	}
 
 	setModel(root) {
+		this.detachGizmo();
 		if (this.model) {
 			this.scene.remove(this.model);
 			disposeTree(this.model);
@@ -190,6 +205,7 @@ export class Viewer {
 		const hHalf = Math.atan(Math.tan(vHalf) * this.camera.aspect);
 		const dist = (radius / Math.sin(Math.min(vHalf, hHalf))) * 1.05;
 		const dir = new THREE.Vector3(0.9, 0.6, 1.2).normalize();
+		this.cameraMoved = false;
 		this.controls.target.copy(center);
 		this.camera.position.copy(center).addScaledVector(dir, dist);
 		this.camera.near = radius / 100;
@@ -354,7 +370,7 @@ export class Viewer {
 			swapped.push([o, o.material]);
 			o.material = Array.isArray(o.material) ? o.material.map(pick) : pick(o.material);
 		});
-		const hidden = [this.grid, this.ground, this.selectionBox, this.sunMarker, this.sunLine].filter((x) => x.visible);
+		const hidden = [this.grid, this.ground, this.selectionBox, this.sunMarker, this.sunLine, this.gizmoHelper].filter((x) => x.visible);
 		hidden.forEach((x) => (x.visible = false));
 		const bg = this.scene.background;
 		this.scene.background = null;
@@ -367,6 +383,20 @@ export class Viewer {
 		this.scene.background = bg;
 		hidden.forEach((x) => (x.visible = true));
 		for (const [o, m] of swapped) o.material = m;
+	}
+
+	attachGizmo(obj, mode = 'translate') {
+		if (!obj) return this.detachGizmo();
+		if (this.gizmo.object !== obj) this.gizmo.attach(obj);
+		this.gizmo.setMode(mode);
+		// Scaling only makes sense along the part's own axes; moving/turning read better in world axes
+		this.gizmo.setSpace(mode === 'scale' ? 'local' : this.gizmoSpace || 'world');
+		this.invalidate();
+	}
+
+	detachGizmo() {
+		if (this.gizmo.object) this.gizmo.detach();
+		this.invalidate();
 	}
 
 	select(obj) {
@@ -385,11 +415,14 @@ export class Viewer {
 	setupPicking() {
 		const el = this.renderer.domElement;
 		let down = null;
-		el.addEventListener('pointerdown', (e) => (down = { x: e.clientX, y: e.clientY, t: performance.now() }));
+		el.addEventListener('pointerdown', (e) => {
+			down = { x: e.clientX, y: e.clientY, t: performance.now() };
+			this.gizmoUsed = false;
+		});
 		el.addEventListener('pointerup', (e) => {
-			if (!down || !this.model) return;
+			if (!down || !this.model || this.gizmoUsed) return;
 			const moved = Math.hypot(e.clientX - down.x, e.clientY - down.y);
-			if (moved > 8 || performance.now() - down.t > 500) return;
+			if (moved > 12 || performance.now() - down.t > 600) return;
 			const rect = el.getBoundingClientRect();
 			const ndc = new THREE.Vector2(((e.clientX - rect.left) / rect.width) * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1);
 			const ray = new THREE.Raycaster();
@@ -435,7 +468,7 @@ export class Viewer {
 	}
 
 	screenshot() {
-		const helpers = [this.grid, this.selectionBox, this.sunMarker, this.sunLine];
+		const helpers = [this.grid, this.selectionBox, this.sunMarker, this.sunLine, this.gizmoHelper];
 		const vis = helpers.map((h) => h.visible);
 		helpers.forEach((h) => (h.visible = false));
 		this.render();

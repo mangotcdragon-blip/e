@@ -34,6 +34,7 @@ const state = {
 	panel: null,
 	convertMode: false,
 	interpolation: 'smooth',
+	gizmoMode: 'translate',
 	voxelRes: 16,
 	javaVoxel: false,
 	lastSaved: null,
@@ -281,10 +282,14 @@ function buildTabs() {
 let panelOptions = {};
 function showPanel(id, options = {}) {
 	if (id !== state.panel && (id === 'parts' || id === 'animate')) stopForEditing();
-	if (id !== 'parts' && id !== 'animate') viewer.select(null);
+	if (id !== 'parts' && id !== 'animate') {
+		viewer.select(null);
+		viewer.detachGizmo();
+	}
 	state.panel = id;
 	panelOptions = options;
 	const sheet = $('#sheet');
+	const opening = !sheet.classList.contains('open');
 	sheet.classList.add('open');
 	document.body.classList.add('sheet-open');
 	$('#sheet-title').textContent = PANELS[id].title;
@@ -296,19 +301,28 @@ function showPanel(id, options = {}) {
 	viewer.showSunMarker = id === 'light';
 	viewer.applySettings();
 	updateHud();
-	requestAnimationFrame(() => viewer.resize());
+	if (opening) requestAnimationFrame(() => {
+		viewer.resize();
+		// Keep the model filling the (now smaller or bigger) view unless you've moved the camera
+		if (!viewer.cameraMoved) viewer.frame();
+	});
 }
 
 function hidePanel() {
 	state.panel = null;
 	viewer.select(null);
+	viewer.detachGizmo();
 	$('#sheet').classList.remove('open');
 	document.body.classList.remove('sheet-open');
 	document.querySelectorAll('.tab').forEach((t) => t.classList.remove('active'));
 	viewer.showSunMarker = false;
 	viewer.applySettings();
 	updateHud();
-	requestAnimationFrame(() => viewer.resize());
+	requestAnimationFrame(() => {
+		viewer.resize();
+		// Keep the model filling the (now smaller or bigger) view unless you've moved the camera
+		if (!viewer.cameraMoved) viewer.frame();
+	});
 }
 
 const refresh = () => state.panel && showPanel(state.panel, { ...panelOptions, keepScroll: true });
@@ -378,6 +392,50 @@ function describeFormat(root) {
 function needModel() {
 	return h('div', { class: 'empty-panel' }, hint('Open a model first.'), button('Open 3D file', () => pickFiles('open'), { kind: 'primary', icon: ICONS.open }), button('Try sample', loadSample, { icon: ICONS.cube }));
 }
+
+// ---- Move / Rotate / Scale handles
+
+const GIZMO_CHANNEL = { translate: 'position', rotate: 'rotation', scale: 'scale' };
+
+function gizmoChips(obj) {
+	viewer.attachGizmo(obj, state.gizmoMode);
+	return h('div', { class: 'gizmo-bar' },
+		chips({
+			options: [
+				{ value: 'translate', label: 'Move' },
+				{ value: 'rotate', label: 'Rotate' },
+				{ value: 'scale', label: 'Scale' },
+			],
+			value: state.gizmoMode,
+			onChange: (v) => {
+				state.gizmoMode = v;
+				viewer.attachGizmo(obj, v);
+			},
+		}),
+		state.gizmoMode !== 'scale' ? toggle({ label: 'Use the part\u2019s own axes', value: viewer.gizmoSpace === 'local', onChange: (v) => ((viewer.gizmoSpace = v ? 'local' : 'world'), viewer.attachGizmo(obj, state.gizmoMode)) }) : null,
+		hint('Drag the coloured handles on the model. Arrows and squares move, rings rotate, cubes scale (the middle one scales evenly).'),
+	);
+}
+
+viewer.on('gizmoChange', (obj, mode) => {
+	if (state.panel === 'parts') {
+		player.setRest(obj);
+	} else if (state.panel === 'animate') {
+		const c = clip();
+		if (!c || !state.bone) return;
+		const t = snapToFrame(state.time);
+		state.time = t;
+		setKey(c, state.bone, GIZMO_CHANNEL[mode], t, player.delta(obj, GIZMO_CHANNEL[mode]), state.interpolation);
+	}
+});
+
+viewer.on('gizmoEnd', () => {
+	if (state.panel === 'parts') refresh();
+	else if (state.panel === 'animate') {
+		player.pose(clip(), state.time);
+		renderAnimatePanelBody();
+	}
+});
 
 // ---- Parts
 
@@ -474,7 +532,11 @@ function renderPartsPanel() {
 			onChange: (v) => ((state.part = v === '' ? null : parts[+v].obj), refresh()),
 		}),
 	];
-	if (!obj) return out;
+	if (!obj) {
+		viewer.detachGizmo();
+		return out;
+	}
+	out.push(gizmoChips(obj));
 
 	// Bigger / smaller part shortcuts
 	const chain = [];
@@ -512,9 +574,12 @@ function renderPartsPanel() {
 		changed();
 	} });
 	out.push(
-		section('Move', ...move),
-		section('Turn', ...turn),
-		section('Size', size, ...sizeAxes),
+		h('details', { class: 'exact', open: state.exactOpen, onToggle: (e) => (state.exactOpen = e.target.open) },
+			h('summary', {}, 'Exact values'),
+			section('Move', ...move),
+			section('Turn', ...turn),
+			section('Size', size, ...sizeAxes),
+		),
 	);
 
 	// Look of this part only
@@ -884,10 +949,12 @@ function renderBoneEditor(c) {
 	if (!state.bone || !bones.includes(state.bone)) state.bone = bones[0];
 	const obj = player.find(state.bone);
 	viewer.select(obj);
+	const handles = gizmoChips(obj);
 	const animated = new Set(c.tracks.map((t) => t.bone));
 	const out = section('Part to move',
-		hint('Tap the model or pick a part. Moving a slider saves a keyframe at the current time.'),
+		hint('Tap the model or pick a part, then drag its handles (or the sliders below). Each change is saved as a keyframe at the current time.'),
 		select({ options: bones.map((b) => ({ value: b, label: animated.has(b) ? `${b}  •` : b })), value: state.bone, onChange: (v) => ((state.bone = v), renderAnimatePanelBody()) }),
+		handles,
 	);
 	const r = viewer.radius / Math.abs(viewer.model.getWorldScale(new THREE.Vector3()).x || 1);
 	const posRange = Math.max(1, Math.ceil(r * 1.5));

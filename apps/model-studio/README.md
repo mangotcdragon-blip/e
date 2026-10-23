@@ -13,14 +13,15 @@ from your browser or file manager the first time). Android 8.0 or newer is neede
 
 ## What it does
 
-The app has six tabs along the bottom. Tap a tab to open its panel; tap it again (or press Back) to close it.
+The app has seven tabs along the bottom. Tap a tab to open its panel; tap it again (or press Back) to close it.
 
 | Tab | |
 | --- | --- |
 | **Open** | Open a model, convert a file, add an animation, or try the built-in sample robot. Shows facts about the model and anything that could not be found (missing textures or parent models). |
 | **Look** | Change materials: colour, texture (replace or remove), **glow** (presets, strength, colour, or glowing in the texture's own colours), metal, shine, see-through, two-sided, faceted, wireframe. Tap the model to pick the material. "Show textures" switches every texture off and on. |
 | **Light** | The studio light is **off by default**, so the model is evenly lit in its true colours. Switch it on to get a movable light with shadows: turn it around the model, raise or lower it, change brightness and colour, add fill light. Also reflections and how strong the glow effect is. |
-| **Animate** | Play animations, scrub the timeline, step frame by frame, change speed. Make your own: pick a part (or tap it), move the Turn/Move/Size sliders and a keyframe is saved at the current time. |
+| **Parts** | Tap a part of the model to select it. Drag the on-model handles to move, rotate or scale it (switch between Move / Rotate / Scale; the centre cube scales evenly), or open "Exact values" for sliders. Give just that part its own glow or colour, or hide it. Edits are kept in every export. |
+| **Animate** | Play animations, scrub the timeline, step frame by frame, change speed. Make your own: tap a part and drag its Move / Rotate / Scale handles (or use the sliders); each change is saved as a keyframe at the current time. |
 | **Save** | Export and convert (see below). On Android, files go to `Downloads/Model Studio`. |
 | **View** | Camera presets, fit to view, screenshot, slow spin, floor grid, wireframe, Minecraft face shading, background colour. |
 
@@ -70,7 +71,7 @@ npm ci
 npm run build          # writes web/dist
 cd ../android
 ./gradlew assembleRelease
-# -> app/build/outputs/apk/release/ModelStudio-1.1.0-release.apk
+# -> app/build/outputs/apk/release/ModelStudio-1.2.0-release.apk
 ```
 
 `npm run dev` in `web/` serves the app at http://localhost:5173 for trying it in a desktop browser

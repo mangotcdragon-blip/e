@@ -24,8 +24,8 @@ android {
         applicationId 'com.modelstudio.app'
         minSdk 26
         targetSdk 35
-        versionCode 2
-        versionName '1.1.0'
+        versionCode 3
+        versionName '1.2.0'
     }
 
     // Release builds use your own key when MS_KEYSTORE etc. are set (see README), so
