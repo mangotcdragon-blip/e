@@ -1,11 +1,16 @@
 package com.customautocorrect.keyboard
 
 import android.content.ClipboardManager
+import android.content.Context
 import android.content.Intent
 import android.inputmethodservice.InputMethodService
 import android.inputmethodservice.Keyboard
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
 import android.text.InputType
 import android.view.Gravity
 import android.view.View
@@ -19,14 +24,17 @@ import android.widget.TextView
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import kotlin.random.Random
 
 class AutocorrectKeyboardService : InputMethodService(), android.inputmethodservice.KeyboardView.OnKeyboardActionListener {
 
     private enum class Page { LETTERS, SYMBOLS, EMOJI, CLIPBOARD }
     private enum class OneHandedState { OFF, RIGHT, LEFT }
 
+    /** What the in-progress word currently shows as, and the myoom to save if it was generated. */
+    private data class Preview(val display: String, val toSave: String?)
+
     companion object {
-        private const val IDLE_DELAY_MS = 3000L
         private const val MODE_LETTERS = 0
         private const val MODE_SYMBOLS = 1
         private const val CODE_ENTER = 10
@@ -34,6 +42,7 @@ class AutocorrectKeyboardService : InputMethodService(), android.inputmethodserv
         private const val CODE_EMOJI = -10
         private const val UI_PREFS = "keyboard_ui_prefs"
         private const val KEY_ONE_HANDED = "one_handed_state"
+        private const val KEYPRESS_VIBRATION_MS = 18L
     }
 
     private lateinit var keyboardView: GboardKeyboardView
@@ -59,11 +68,24 @@ class AutocorrectKeyboardService : InputMethodService(), android.inputmethodserv
     private var oneHandedState = OneHandedState.OFF
 
     private val handler = Handler(Looper.getMainLooper())
-    private var idleRunnable: Runnable? = null
     private var statusClearRunnable: Runnable? = null
 
     private lateinit var systemClipboard: ClipboardManager
     private val clipListener = ClipboardManager.OnPrimaryClipChangedListener { captureClipboard() }
+
+    // The word being typed right now, exactly as typed. The editor shows its myoom (as composing
+    // text) instead, so whatever is in the text box is always already converted.
+    private val typedWord = StringBuilder()
+    private var preview: Preview? = null
+
+    private val vibrator: Vibrator? by lazy {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            (getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager)?.defaultVibrator
+        } else {
+            @Suppress("DEPRECATION")
+            getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
+        }
+    }
 
     override fun onCreate() {
         super.onCreate()
@@ -75,7 +97,6 @@ class AutocorrectKeyboardService : InputMethodService(), android.inputmethodserv
     override fun onDestroy() {
         super.onDestroy()
         systemClipboard.removePrimaryClipChangedListener(clipListener)
-        cancelIdleTimer()
     }
 
     private fun loadOneHandedState(): OneHandedState {
@@ -145,9 +166,9 @@ class AutocorrectKeyboardService : InputMethodService(), android.inputmethodserv
         emojiGrid.layoutManager = GridLayoutManager(this, 8)
         emojiAdapter = EmojiAdapter { emoji ->
             val ic = currentInputConnection ?: return@EmojiAdapter
-            correctWordBeforeCursor(ic)
+            vibrateKeypress()
+            finishWord(ic)
             ic.commitText(emoji, 1)
-            scheduleIdleCorrection()
         }
         emojiGrid.adapter = emojiAdapter
 
@@ -166,8 +187,9 @@ class AutocorrectKeyboardService : InputMethodService(), android.inputmethodserv
 
         emojiPageView.findViewById<View>(R.id.emojiBackBtn).setOnClickListener { switchToLetters() }
         emojiPageView.findViewById<ImageButton>(R.id.emojiBackspaceBtn).setOnClickListener {
-            currentInputConnection?.deleteSurroundingText(1, 0)
-            scheduleIdleCorrection()
+            val ic = currentInputConnection ?: return@setOnClickListener
+            vibrateKeypress()
+            backspace(ic)
         }
     }
 
@@ -178,9 +200,8 @@ class AutocorrectKeyboardService : InputMethodService(), android.inputmethodserv
         clipboardAdapter = ClipboardAdapter(
             onItemClick = { text ->
                 val ic = currentInputConnection ?: return@ClipboardAdapter
-                correctWordBeforeCursor(ic)
+                finishWord(ic)
                 ic.commitText(text, 1)
-                scheduleIdleCorrection()
             },
             onRemoveClick = { text ->
                 ClipboardStore.removeEntry(this, text)
@@ -243,6 +264,7 @@ class AutocorrectKeyboardService : InputMethodService(), android.inputmethodserv
 
     override fun onStartInputView(info: EditorInfo?, restarting: Boolean) {
         super.onStartInputView(info, restarting)
+        resetWord()
         currentMode = MODE_LETTERS
         capsOn = false
         keyboardView.keyboard = qwertyKeyboard
@@ -250,16 +272,29 @@ class AutocorrectKeyboardService : InputMethodService(), android.inputmethodserv
         keyboardView.invalidateAllKeys()
         showPage(Page.LETTERS)
         applyOneHandedLayout()
-        cancelIdleTimer()
         statusText.text = ""
     }
 
     override fun onFinishInputView(finishingInput: Boolean) {
+        currentInputConnection?.let { lockInWord(it) }
         super.onFinishInputView(finishingInput)
-        cancelIdleTimer()
     }
 
-    // ---- Autocorrect engine ----
+    override fun onUpdateSelection(
+        oldSelStart: Int, oldSelEnd: Int,
+        newSelStart: Int, newSelEnd: Int,
+        candidatesStart: Int, candidatesEnd: Int
+    ) {
+        super.onUpdateSelection(oldSelStart, oldSelEnd, newSelStart, newSelEnd, candidatesStart, candidatesEnd)
+        // The user moved the cursor away from the word being typed: keep its myoom where it is.
+        if (typedWord.isNotEmpty() && candidatesEnd != -1 &&
+            (newSelStart != candidatesEnd || newSelEnd != candidatesEnd)
+        ) {
+            currentInputConnection?.let { lockInWord(it) }
+        }
+    }
+
+    // ---- Myoom engine ----
 
     private fun isWordChar(c: Char) = c.isLetterOrDigit() || c == '\''
 
@@ -269,26 +304,81 @@ class AutocorrectKeyboardService : InputMethodService(), android.inputmethodserv
         return text.substring(start)
     }
 
-    /** Looks at the word immediately before the cursor and replaces it in place if it matches a rule. */
-    private fun correctWordBeforeCursor(ic: InputConnection) {
+    private fun previewFor(word: String): Preview {
+        val saved = DictionaryStore.lookup(this, word)
+        return when {
+            saved != null && MyoomGenerator.isMyoomish(saved) -> Preview(MyoomGenerator.matchCase(word, saved), null)
+            saved != null -> Preview(saved, null)
+            !MyoomGenerator.isEligible(word) -> Preview(word, null)
+            else -> {
+                // Seeded by the word so the preview doesn't flicker between variants as you type.
+                val generated = MyoomGenerator.generateUnique(word, Random(word.lowercase().hashCode())) {
+                    DictionaryStore.isReplacementTaken(this, it)
+                }
+                Preview(MyoomGenerator.matchCase(word, generated), generated)
+            }
+        }
+    }
+
+    private fun typeWordChar(ic: InputConnection, c: Char) {
+        typedWord.append(c)
+        val p = previewFor(typedWord.toString())
+        preview = p
+        ic.setComposingText(p.display, 1)
+    }
+
+    private fun backspace(ic: InputConnection) {
+        if (typedWord.isEmpty()) {
+            ic.deleteSurroundingText(1, 0)
+            return
+        }
+        typedWord.deleteCharAt(typedWord.length - 1)
+        if (typedWord.isEmpty()) {
+            preview = null
+            ic.commitText("", 1)
+        } else {
+            val p = previewFor(typedWord.toString())
+            preview = p
+            ic.setComposingText(p.display, 1)
+        }
+    }
+
+    /** Saves the in-progress word's myoom and leaves it in the text box as normal text. */
+    private fun lockInWord(ic: InputConnection) {
+        val p = preview
+        val word = typedWord.toString()
+        resetWord()
+        if (p == null || word.isEmpty()) return
+        p.toSave?.let { DictionaryStore.upsert(this, word, it) }
+        ic.commitText(p.display, 1)
+        if (p.display != word) flashStatus("\"$word\" → \"${p.display}\"")
+    }
+
+    private fun resetWord() {
+        typedWord.setLength(0)
+        preview = null
+    }
+
+    /**
+     * Called before any separator (space, enter, punctuation, emoji, paste). Locks in the word
+     * being typed, or -- if nothing is being typed, e.g. the cursor was moved into existing
+     * text -- applies a saved rule to the word before the cursor.
+     */
+    private fun finishWord(ic: InputConnection) {
+        if (typedWord.isNotEmpty()) {
+            lockInWord(ic)
+            return
+        }
+        if (isSensitiveField()) return
         val text = ic.getTextBeforeCursor(64, 0)?.toString() ?: return
         val word = extractTrailingWord(text)
         if (word.isEmpty()) return
-        val saved = DictionaryStore.lookup(this, word)
-        val replacement = when {
-            saved != null && MyoomGenerator.isMyoomish(saved) -> MyoomGenerator.matchCase(word, saved)
-            saved != null -> saved
-            isSensitiveField() || !MyoomGenerator.isEligible(word) -> return
-            else -> {
-                val generated = MyoomGenerator.generate(word)
-                DictionaryStore.upsert(this, word, generated)
-                MyoomGenerator.matchCase(word, generated)
-            }
-        }
+        val saved = DictionaryStore.lookup(this, word) ?: return
+        val replacement = if (MyoomGenerator.isMyoomish(saved)) MyoomGenerator.matchCase(word, saved) else saved
         if (replacement == word) return
         ic.deleteSurroundingText(word.length, 0)
         ic.commitText(replacement, 1)
-        flashStatus("Corrected \"$word\" → \"$replacement\"")
+        flashStatus("\"$word\" → \"$replacement\"")
     }
 
     private fun isSensitiveField(): Boolean {
@@ -305,20 +395,6 @@ class AutocorrectKeyboardService : InputMethodService(), android.inputmethodserv
         }
     }
 
-    private fun scheduleIdleCorrection() {
-        cancelIdleTimer()
-        val r = Runnable {
-            currentInputConnection?.let { correctWordBeforeCursor(it) }
-        }
-        idleRunnable = r
-        handler.postDelayed(r, IDLE_DELAY_MS)
-    }
-
-    private fun cancelIdleTimer() {
-        idleRunnable?.let { handler.removeCallbacks(it) }
-        idleRunnable = null
-    }
-
     private fun flashStatus(message: String) {
         if (!::statusText.isInitialized) return
         statusText.text = message
@@ -326,6 +402,20 @@ class AutocorrectKeyboardService : InputMethodService(), android.inputmethodserv
         val r = Runnable { statusText.text = "" }
         statusClearRunnable = r
         handler.postDelayed(r, 2000)
+    }
+
+    private fun vibrateKeypress() {
+        val v = vibrator ?: return
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                v.vibrate(VibrationEffect.createOneShot(KEYPRESS_VIBRATION_MS, VibrationEffect.DEFAULT_AMPLITUDE))
+            } else {
+                @Suppress("DEPRECATION")
+                v.vibrate(KEYPRESS_VIBRATION_MS)
+            }
+        } catch (e: Exception) {
+            // Some devices/emulators have no usable vibrator; typing must still work.
+        }
     }
 
     // ---- OnKeyboardActionListener ----
@@ -338,20 +428,15 @@ class AutocorrectKeyboardService : InputMethodService(), android.inputmethodserv
                 qwertyKeyboard.isShifted = capsOn
                 keyboardView.invalidateAllKeys()
             }
-            Keyboard.KEYCODE_DELETE -> {
-                ic.deleteSurroundingText(1, 0)
-                scheduleIdleCorrection()
-            }
+            Keyboard.KEYCODE_DELETE -> backspace(ic)
             Keyboard.KEYCODE_MODE_CHANGE -> {
                 currentMode = if (currentMode == MODE_LETTERS) MODE_SYMBOLS else MODE_LETTERS
                 keyboardView.keyboard = if (currentMode == MODE_LETTERS) qwertyKeyboard else symbolsKeyboard
                 showPage(if (currentMode == MODE_LETTERS) Page.LETTERS else Page.SYMBOLS)
             }
-            CODE_EMOJI -> {
-                showPage(Page.EMOJI)
-            }
+            CODE_EMOJI -> showPage(Page.EMOJI)
             CODE_ENTER -> {
-                correctWordBeforeCursor(ic)
+                finishWord(ic)
                 val info = currentInputEditorInfo
                 val isMultiline = info != null &&
                     (info.inputType and InputType.TYPE_TEXT_FLAG_MULTI_LINE) != 0
@@ -363,33 +448,34 @@ class AutocorrectKeyboardService : InputMethodService(), android.inputmethodserv
                 } else {
                     ic.commitText("\n", 1)
                 }
-                scheduleIdleCorrection()
             }
             CODE_SPACE -> {
-                correctWordBeforeCursor(ic)
+                finishWord(ic)
                 ic.commitText(" ", 1)
-                scheduleIdleCorrection()
             }
             else -> {
-                val typedChar = primaryCode.toChar()
-                if (!isWordChar(typedChar)) {
-                    // Any special/punctuation character applies the pending correction first.
-                    correctWordBeforeCursor(ic)
-                }
                 var code = primaryCode
                 if (capsOn && code in 97..122) code -= 32
-                ic.commitText(code.toChar().toString(), 1)
+                val typedChar = code.toChar()
+                if (isWordChar(typedChar) && !isSensitiveField()) {
+                    typeWordChar(ic, typedChar)
+                } else {
+                    if (!isWordChar(typedChar)) finishWord(ic)
+                    ic.commitText(typedChar.toString(), 1)
+                }
                 if (capsOn && currentMode == MODE_LETTERS) {
                     capsOn = false
                     qwertyKeyboard.isShifted = false
                     keyboardView.invalidateAllKeys()
                 }
-                scheduleIdleCorrection()
             }
         }
     }
 
-    override fun onPress(primaryCode: Int) {}
+    override fun onPress(primaryCode: Int) {
+        vibrateKeypress()
+    }
+
     override fun onRelease(primaryCode: Int) {}
     override fun onText(text: CharSequence?) {}
     override fun swipeLeft() {}

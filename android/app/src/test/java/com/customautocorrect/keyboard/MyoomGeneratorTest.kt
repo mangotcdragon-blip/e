@@ -57,6 +57,33 @@ class MyoomGeneratorTest {
     }
 
     @Test
+    fun `every word gets a different myoom, even lots of short ones`() {
+        val used = mutableSetOf<String>()
+        val random = Random(11)
+        val words = (1..300).map { i -> listOf("a", "I", "to", "cat", "hello", "keyboard")[i % 6] + i }
+            .map { it.filter(Char::isLetter) }
+        for (word in words) {
+            val out = MyoomGenerator.generateUnique(word, random) { it in used }
+            assertTrue("duplicate '$out' for '$word'", used.add(out))
+        }
+    }
+
+    @Test
+    fun `unique myooms stay at the word's length while that length has room`() {
+        val used = mutableSetOf<String>()
+        val random = Random(5)
+        val out = MyoomGenerator.generateUnique("keyboard", random) { it in used }
+        assertEquals("keyboard".length, out.length)
+    }
+
+    @Test
+    fun `short words grow only once their length is used up`() {
+        val used = mutableSetOf("myo")
+        val out = MyoomGenerator.generateUnique("a", Random(2)) { it in used }
+        assertEquals(4, out.length)
+    }
+
+    @Test
     fun `case follows the typed word`() {
         assertEquals("myoomy", MyoomGenerator.matchCase("hello", "myoomy"))
         assertEquals("Myoomy", MyoomGenerator.matchCase("Hello", "myoomy"))

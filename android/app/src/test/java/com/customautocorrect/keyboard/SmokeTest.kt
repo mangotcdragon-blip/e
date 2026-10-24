@@ -122,4 +122,13 @@ class SmokeTest {
         assertEquals(1, count)
         assertEquals("be right back", DictionaryStore.lookup(context, "brb"))
     }
+
+    @Test
+    fun `replacement-taken check is case-insensitive`() {
+        val context = ApplicationProvider.getApplicationContext<android.app.Application>()
+        DictionaryStore.upsert(context, "keyboard", "myoomify")
+        assertTrue(DictionaryStore.isReplacementTaken(context, "myoomify"))
+        assertTrue(DictionaryStore.isReplacementTaken(context, "Myoomify"))
+        assertEquals(false, DictionaryStore.isReplacementTaken(context, "myoomifyy"))
+    }
 }

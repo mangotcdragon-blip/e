@@ -23,16 +23,20 @@ private class DictionaryDb private constructor(context: Context) :
                 "from_word TEXT NOT NULL, " +
                 "to_word TEXT NOT NULL)"
         )
+        createToWordIndex(db)
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        db.execSQL("DROP TABLE IF EXISTS rules")
-        onCreate(db)
+        if (oldVersion < 2) createToWordIndex(db)
+    }
+
+    private fun createToWordIndex(db: SQLiteDatabase) {
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_rules_to_word ON rules (to_word COLLATE NOCASE)")
     }
 
     companion object {
         private const val DB_NAME = "autocorrect.db"
-        private const val DB_VERSION = 1
+        private const val DB_VERSION = 2
 
         @Volatile private var instance: DictionaryDb? = null
 
@@ -58,6 +62,13 @@ object DictionaryStore {
         ).use { cursor ->
             return if (cursor.moveToFirst()) cursor.getString(0) else null
         }
+    }
+
+    fun isReplacementTaken(context: Context, replacement: String): Boolean {
+        val db = DictionaryDb.get(context).readableDatabase
+        db.rawQuery(
+            "SELECT 1 FROM rules WHERE to_word = ? COLLATE NOCASE LIMIT 1", arrayOf(replacement)
+        ).use { cursor -> return cursor.moveToFirst() }
     }
 
     fun count(context: Context, search: String = ""): Int {

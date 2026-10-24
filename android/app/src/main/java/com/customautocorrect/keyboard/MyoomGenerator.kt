@@ -6,7 +6,7 @@ object MyoomGenerator {
 
     private val shortForms = listOf("myo", "myom")
     private val singleForms = listOf(
-        "myom", "myoom", "myoomy", "myoomz", "myoomer", "myoomish",
+        "myo", "myom","myoom", "myoomy", "myoomz", "myoomer", "myoomish",
         "myoomify", "myoomified", "myoomtastic"
     )
     private val doubleForms = listOf(
@@ -26,10 +26,34 @@ object MyoomGenerator {
     fun isEligible(word: String): Boolean =
         word.any { it.isLetter() } && word.none { it.isDigit() } && !isMyoomish(word)
 
+    /**
+     * Like [generate], but never returns a variant [isTaken] reports as already used. Prefers the
+     * word's own length and only grows longer once that length's variants are exhausted, so
+     * short words still get short myooms where possible.
+     */
+    fun generateUnique(word: String, random: Random, isTaken: (String) -> Boolean): String {
+        var target = word.length.coerceAtLeast(3)
+        var candidate = generateForLength(target, random)
+        while (true) {
+            repeat(ATTEMPTS_PER_LENGTH) {
+                candidate = generateForLength(target, random)
+                if (!isTaken(candidate)) return candidate
+            }
+            if (target >= word.length + MAX_EXTRA_LENGTH) return candidate
+            target++
+        }
+    }
+
+    private const val ATTEMPTS_PER_LENGTH = 40
+    private const val MAX_EXTRA_LENGTH = 60
+
     /** Returns a lowercase myoom variant whose length roughly tracks [word]'s length. */
     fun generate(word: String, random: Random = Random.Default): String {
-        val target = word.length
-        if (target <= 2) return shortForms.random(random)
+        if (word.length <= 2) return shortForms.random(random)
+        return generateForLength(word.length, random)
+    }
+
+    private fun generateForLength(target: Int, random: Random): String {
 
         val pool = when {
             target >= 15 -> singleForms + doubleForms + tripleForms
