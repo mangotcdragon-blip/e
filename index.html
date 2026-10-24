@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Custom Autocorrect</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="app-header">
+    <h1>Custom Autocorrect</h1>
+    <p class="subtitle">
+      Define your own word replacements. A word is corrected as soon as you press
+      <kbd>Space</kbd> / <kbd>Enter</kbd>, or after about 3 seconds of no typing.
+    </p>
+  </header>
+
+  <main class="layout">
+    <section class="panel editor-panel">
+      <div class="panel-header">
+        <h2>Editor</h2>
+        <span id="status" class="status" aria-live="polite"></span>
+      </div>
+      <textarea
+        id="editor"
+        placeholder="Start typing here… try one of your custom words, then press space."
+        spellcheck="false"
+      ></textarea>
+    </section>
+
+    <section class="panel dict-panel">
+      <div class="panel-header">
+        <h2>Custom Words</h2>
+        <span id="ruleCount" class="status"></span>
+      </div>
+
+      <form id="ruleForm" class="rule-form">
+        <input id="fromInput" type="text" placeholder="Word (e.g. hello)" autocomplete="off" required />
+        <span class="arrow">&rarr;</span>
+        <input id="toInput" type="text" placeholder="Replacement (e.g. myooooms)" autocomplete="off" required />
+        <button type="submit">Add</button>
+      </form>
+
+      <input id="searchInput" type="text" class="search-input" placeholder="Search words…" autocomplete="off" />
+      <div id="countText" class="count-text"></div>
+
+      <ul id="ruleList" class="rule-list"></ul>
+      <button id="loadMoreBtn" type="button" class="load-more" hidden>Load more</button>
+
+      <div id="ioStatus" class="io-status" hidden></div>
+
+      <div class="io-actions">
+        <button id="exportBtn" type="button">Export JSON</button>
+        <button id="importBtn" type="button">Import JSON</button>
+        <button id="clearBtn" type="button" class="danger">Clear All</button>
+        <input id="importFile" type="file" accept="application/json,.json" hidden />
+      </div>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
