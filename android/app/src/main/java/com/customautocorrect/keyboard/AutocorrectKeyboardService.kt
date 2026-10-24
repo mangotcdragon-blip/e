@@ -274,11 +274,35 @@ class AutocorrectKeyboardService : InputMethodService(), android.inputmethodserv
         val text = ic.getTextBeforeCursor(64, 0)?.toString() ?: return
         val word = extractTrailingWord(text)
         if (word.isEmpty()) return
-        val replacement = DictionaryStore.lookup(this, word) ?: return
+        val saved = DictionaryStore.lookup(this, word)
+        val replacement = when {
+            saved != null && MyoomGenerator.isMyoomish(saved) -> MyoomGenerator.matchCase(word, saved)
+            saved != null -> saved
+            isSensitiveField() || !MyoomGenerator.isEligible(word) -> return
+            else -> {
+                val generated = MyoomGenerator.generate(word)
+                DictionaryStore.upsert(this, word, generated)
+                MyoomGenerator.matchCase(word, generated)
+            }
+        }
         if (replacement == word) return
         ic.deleteSurroundingText(word.length, 0)
         ic.commitText(replacement, 1)
         flashStatus("Corrected \"$word\" → \"$replacement\"")
+    }
+
+    private fun isSensitiveField(): Boolean {
+        val type = currentInputEditorInfo?.inputType ?: return false
+        if ((type and InputType.TYPE_MASK_CLASS) != InputType.TYPE_CLASS_TEXT) return true
+        return when (type and InputType.TYPE_MASK_VARIATION) {
+            InputType.TYPE_TEXT_VARIATION_PASSWORD,
+            InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD,
+            InputType.TYPE_TEXT_VARIATION_WEB_PASSWORD,
+            InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS,
+            InputType.TYPE_TEXT_VARIATION_WEB_EMAIL_ADDRESS,
+            InputType.TYPE_TEXT_VARIATION_URI -> true
+            else -> false
+        }
     }
 
     private fun scheduleIdleCorrection() {
