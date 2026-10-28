@@ -18,9 +18,10 @@ Setup
 2. In the Discord developer portal (https://discord.com/developers/applications)
    create a bot, copy its token, and under "Bot" turn on
    "MESSAGE CONTENT INTENT".
-3. Run:
-       BOT_TOKEN=your-token DASHBOARD_PASSWORD=pick-one python starboard_bot.py
-   (On Windows PowerShell: $env:BOT_TOKEN="..."; $env:DASHBOARD_PASSWORD="..."; python starboard_bot.py)
+3. Paste your token into BOT_TOKEN below (or set the BOT_TOKEN environment
+   variable) and run:
+       DASHBOARD_PASSWORD=pick-one python starboard_bot.py
+   (On Windows PowerShell: $env:DASHBOARD_PASSWORD="..."; python starboard_bot.py)
 4. Open http://localhost:8080, log in, use "Invite bot" to add it to your
    server, then click "New starboard".
 
@@ -49,7 +50,9 @@ from pathlib import Path
 import discord
 from aiohttp import web
 
-BOT_TOKEN = os.getenv("BOT_TOKEN", "")
+# Paste your bot token between the quotes, or set the BOT_TOKEN environment
+# variable. Never commit a file with a real token in it to a public repo.
+BOT_TOKEN = os.getenv("BOT_TOKEN") or ""
 DASHBOARD_PASSWORD = os.getenv("DASHBOARD_PASSWORD", "")
 DASHBOARD_HOST = os.getenv("DASHBOARD_HOST", "0.0.0.0")
 DASHBOARD_PORT = int(os.getenv("DASHBOARD_PORT", "8080"))
