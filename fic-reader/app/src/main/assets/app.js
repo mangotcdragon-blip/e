@@ -116,9 +116,15 @@
     if (r.status === 404) { r.problem = { kind: 'missing', message: 'Not found. It may have been deleted or hidden.' }; return r; }
     if (r.status >= 400) {
       const p = AO3.describeProblem(AO3.parse(r.body || ''));
-      if (p.kind === 'unknown') {
-        p.kind = (r.status === 418 || r.status === 403 || r.status === 503) ? 'check' : 'server';
-        p.message = p.kind === 'check' ? 'AO3 wants to check this connection first.' : 'AO3 returned an error (' + r.status + '). It may be down for maintenance.';
+      const outage = r.status === 500 || r.status === 502 || r.status === 504 || (r.status >= 520 && r.status <= 530);
+      if (outage && p.kind !== 'check') {
+        p.kind = 'down';
+        p.message = 'AO3\'s servers are not responding right now (error ' + r.status + '). This is on AO3\'s side, not your phone or the app. Try again in a few minutes.';
+      } else if (p.kind === 'unknown') {
+        p.kind = (r.status === 418 || r.status === 403) ? 'check' : r.status === 503 ? 'down' : 'server';
+        p.message = p.kind === 'check' ? 'AO3 wants to check this connection first.'
+          : p.kind === 'down' ? 'AO3 is down or busy right now (error 503). Try again in a few minutes.'
+          : 'AO3 returned an error (' + r.status + '). Try again in a little while.';
       }
       r.problem = p;
       return r;
@@ -232,7 +238,7 @@
     lastRetry = retry || null;
     const titles = {
       network: 'No connection', login: 'Log in needed', rate: 'Slow down', missing: 'Not found',
-      check: 'AO3 is checking this connection', server: 'AO3 is having trouble', adult: 'Adult content check', unknown: 'Could not load this',
+      check: 'AO3 is checking this connection', server: 'AO3 is having trouble', down: 'AO3 is down right now', adult: 'Adult content check', unknown: 'Could not load this',
     };
     const el = h(`<div class="error-box"><b>${esc(titles[problem.kind] || titles.unknown)}</b><p>${esc(problem.message)}</p><div class="btn-row"></div></div>`);
     const row = $('.btn-row', el);
@@ -1197,7 +1203,7 @@
     }, 'danger');
 
     el.onShow = () => { const y = el.scrollTop; buildSettings(); el.scrollTop = y; };
-    wrap.appendChild(h(`<p class="result-meta" style="text-align:center;margin-top:26px">Fic Reader 1.0 · Reads works from archiveofourown.org.<br>Not made by or affiliated with AO3 or the OTW.</p>`));
+    wrap.appendChild(h(`<p class="result-meta" style="text-align:center;margin-top:26px">Fic Reader 1.1 · Reads works from archiveofourown.org.<br>Not made by or affiliated with AO3 or the OTW.</p>`));
   }
 
   function importSheet() {

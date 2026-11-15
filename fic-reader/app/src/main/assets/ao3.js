@@ -441,7 +441,9 @@
     if (/adult content|proceed/i.test(t) && doc.querySelector('p.caution'))
       return { kind: 'adult', message: 'AO3 asked to confirm adult content.' };
     if (/retry later|too many requests/i.test(t)) return { kind: 'rate', message: 'AO3 says to slow down. Wait a minute and try again.' };
-    if (/temporarily denied|just a moment|checking your browser|cloudflare/i.test(t))
+    if (/bad gateway|gateway time-?out|web server is down|host error|origin is unreachable|connection timed out|down for maintenance|archive is down/i.test(t))
+      return { kind: 'down', message: 'AO3\'s servers are not responding right now. This is on AO3\'s side, not your phone or the app. Try again in a few minutes.' };
+    if (/temporarily denied|just a moment|checking your browser|verify you are human|cf-chl|challenge-platform/i.test(t + ' ' + (doc.documentElement ? doc.documentElement.innerHTML.slice(0, 5000) : '')))
       return { kind: 'check', message: 'AO3 wants to check this connection first.' };
     if (/404|can't find|could not be found|has been deleted/i.test(t))
       return { kind: 'missing', message: 'This work could not be found. It may have been deleted.' };
