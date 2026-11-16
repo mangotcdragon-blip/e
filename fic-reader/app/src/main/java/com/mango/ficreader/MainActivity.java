@@ -17,6 +17,7 @@ import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+import android.widget.FrameLayout;
 
 import org.json.JSONObject;
 
@@ -44,6 +45,7 @@ public class MainActivity extends Activity {
     private static final int REQ_BROWSER = 7;
 
     private WebView web;
+    private WebFetcher fetcher;
     private final ExecutorService pool = Executors.newFixedThreadPool(3);
     private final Handler main = new Handler(Looper.getMainLooper());
     private String userAgent;
@@ -62,7 +64,17 @@ public class MainActivity extends Activity {
         web = new WebView(this);
         web.setBackgroundColor(Color.parseColor("#111216"));
         web.setOverScrollMode(View.OVER_SCROLL_NEVER);
-        setContentView(web);
+
+        // The page fetcher's WebView sits behind the UI, 1px and invisible: WebViews load
+        // more reliably when attached to a window.
+        fetcher = new WebFetcher(this);
+        FrameLayout root = new FrameLayout(this);
+        View fv = fetcher.view();
+        fv.setAlpha(0f);
+        root.addView(fv, new FrameLayout.LayoutParams(1, 1));
+        root.addView(web, new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
+        setContentView(root);
 
         WebSettings s = web.getSettings();
         s.setJavaScriptEnabled(true);
@@ -155,6 +167,7 @@ public class MainActivity extends Activity {
     @Override
     protected void onDestroy() {
         pool.shutdownNow();
+        fetcher.view().destroy();
         web.destroy();
         super.onDestroy();
     }
@@ -225,13 +238,31 @@ public class MainActivity extends Activity {
                 InputStream in = code >= 400 ? c.getErrorStream() : c.getInputStream();
                 String body = in == null ? "" : readAll(in);
                 c.disconnect();
-                deliver(id, code, current, body, null);
+                if (needsBrowser(code)) {
+                    viaBrowser(id, url);
+                } else {
+                    deliver(id, code, current, body, null);
+                }
                 return;
             }
             deliver(id, 0, current, "", "Too many redirects");
         } catch (Exception e) {
-            deliver(id, 0, current, "", e.getClass().getSimpleName() + ": " + e.getMessage());
+            // Connection or TLS failure: a real browser often still gets through.
+            viaBrowser(id, url);
         }
+    }
+
+    /** Statuses where AO3 / Cloudflare may serve a browser what it refused this request. */
+    private static boolean needsBrowser(int code) {
+        return code == 403 || code == 418 || code == 503 || (code >= 500 && code != 501);
+    }
+
+    private void viaBrowser(String id, String url) {
+        main.post(() -> {
+            if (isDestroyed()) return;
+            fetcher.fetch(url, (status, finalUrl, html, error) ->
+                    deliver(id, status, finalUrl == null ? url : finalUrl, html, error));
+        });
     }
 
     private static String readAll(InputStream in) throws Exception {

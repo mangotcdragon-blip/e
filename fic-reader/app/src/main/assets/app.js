@@ -1203,7 +1203,7 @@
     }, 'danger');
 
     el.onShow = () => { const y = el.scrollTop; buildSettings(); el.scrollTop = y; };
-    wrap.appendChild(h(`<p class="result-meta" style="text-align:center;margin-top:26px">Fic Reader 1.1 · Reads works from archiveofourown.org.<br>Not made by or affiliated with AO3 or the OTW.</p>`));
+    wrap.appendChild(h(`<p class="result-meta" style="text-align:center;margin-top:26px">Fic Reader 1.2 · Reads works from archiveofourown.org.<br>Not made by or affiliated with AO3 or the OTW.</p>`));
   }
 
   function importSheet() {
