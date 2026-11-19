@@ -1,12 +1,14 @@
 package com.dailytools.calculator.data.network
 
+import okhttp3.ResponseBody
 import retrofit2.http.GET
 import retrofit2.http.Query
 import retrofit2.http.Url
 
 /**
  * Rule34.xxx Danbooru-style API (https://rule34.xxx/index.php?page=help&topic=dapi).
- * Returns a bare JSON array of posts.
+ * Returns a bare JSON array of posts - but a JSON string error without credentials, and sometimes an
+ * empty body for no results - so the body is read raw and parsed by BooruRepository.
  */
 interface Rule34Api {
     @GET("index.php")
@@ -18,7 +20,10 @@ interface Rule34Api {
         @Query("tags") tags: String,
         @Query("limit") limit: Int,
         @Query("pid") pid: Int,
-    ): List<Rule34Post>?
+        // Rule34 now rejects unauthenticated API calls; both values come from the account's Options page.
+        @Query("user_id") userId: String?,
+        @Query("api_key") apiKey: String?,
+    ): ResponseBody
 
     // Rule34's autocomplete lives on the main domain rather than api.rule34.xxx,
     // so this call takes a full absolute URL that overrides the client's base URL.

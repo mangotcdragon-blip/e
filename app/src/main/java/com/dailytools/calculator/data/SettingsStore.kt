@@ -28,6 +28,9 @@ data class SessionState(
     val wasInDetail: Boolean = false,
 )
 
+/** Rule34's API now requires these, from the account's Options page ("API Access Credentials"). */
+data class Rule34Credentials(val userId: String, val apiKey: String)
+
 private val Context.dataStore by preferencesDataStore(name = "gallery_settings")
 
 class SettingsStore(private val context: Context) {
@@ -47,6 +50,22 @@ class SettingsStore(private val context: Context) {
         val EXTERNAL_CACHE_TREE_URI = stringPreferencesKey("external_cache_tree_uri")
         val FOR_YOU_ENABLED = booleanPreferencesKey("for_you_enabled")
         val BLACKLISTED_TAGS = stringPreferencesKey("blacklisted_tags")
+        val RULE34_USER_ID = stringPreferencesKey("rule34_user_id")
+        val RULE34_API_KEY = stringPreferencesKey("rule34_api_key")
+    }
+
+    /** Null until both values are filled in. */
+    val rule34Credentials: Flow<Rule34Credentials?> = context.dataStore.data.map { prefs ->
+        val userId = prefs[Keys.RULE34_USER_ID]?.trim().orEmpty()
+        val apiKey = prefs[Keys.RULE34_API_KEY]?.trim().orEmpty()
+        if (userId.isNotEmpty() && apiKey.isNotEmpty()) Rule34Credentials(userId, apiKey) else null
+    }
+
+    suspend fun setRule34Credentials(userId: String, apiKey: String) {
+        context.dataStore.edit { prefs ->
+            prefs[Keys.RULE34_USER_ID] = userId.trim()
+            prefs[Keys.RULE34_API_KEY] = apiKey.trim()
+        }
     }
 
     /** Tags to exclude from every search, in every mode - stored space-joined like a query string. */
