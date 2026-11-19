@@ -18,7 +18,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.dailytools.calculator.data.model.MediaTypeFilter
 import com.dailytools.calculator.data.model.Rating
-import com.dailytools.calculator.data.model.Source
 import com.dailytools.calculator.data.model.SortOrder
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -26,7 +25,6 @@ import com.dailytools.calculator.data.model.SortOrder
 fun FilterSheet(
     state: BrowserUiState,
     onDismiss: () -> Unit,
-    onSourceChange: (Source) -> Unit,
     onRatingChange: (Rating) -> Unit,
     onMediaTypeChange: (MediaTypeFilter) -> Unit,
     onSortChange: (SortOrder) -> Unit,
@@ -48,18 +46,6 @@ fun FilterSheet(
                 }
                 Switch(checked = state.forYouEnabled, onCheckedChange = onForYouChange)
             }
-
-            Text(
-                "Source",
-                style = androidx.compose.material3.MaterialTheme.typography.titleLarge,
-                modifier = Modifier.padding(top = 20.dp),
-            )
-            ChipRow(
-                options = Source.entries,
-                selected = state.source,
-                label = { it.label },
-                onSelect = onSourceChange,
-            )
 
             Text(
                 "Rating",
@@ -86,7 +72,7 @@ fun FilterSheet(
             )
 
             Text(
-                "Sort" + if (state.source == Source.RULE34) " (e621 only)" else "",
+                "Sort",
                 style = androidx.compose.material3.MaterialTheme.typography.titleLarge,
                 modifier = Modifier.padding(top = 20.dp),
             )
@@ -94,7 +80,6 @@ fun FilterSheet(
                 options = SortOrder.entries,
                 selected = state.sort,
                 label = { it.label },
-                enabled = state.source == Source.E621,
                 onSelect = onSortChange,
             )
         }

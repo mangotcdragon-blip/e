@@ -21,7 +21,7 @@ object NetworkModule {
 
     private fun client(userAgent: String): OkHttpClient = OkHttpClient.Builder()
         .addInterceptor(UserAgentInterceptor(userAgent))
-        // e621/Rule34 ask that the search API specifically not be hit more than once a second -
+        // e621 asks that its search API specifically not be hit more than once a second -
         // this paces requests instead of firing them all at once, and this client's the one that
         // needs it since it's the JSON API rather than a media/CDN host.
         .addInterceptor(MinIntervalInterceptor())
@@ -38,14 +38,5 @@ object NetworkModule {
             .addConverterFactory(GsonConverterFactory.create())
             .build()
             .create(E621Api::class.java)
-    }
-
-    val rule34Api: Rule34Api by lazy {
-        Retrofit.Builder()
-            .baseUrl("https://api.rule34.xxx/")
-            .client(client("CalcGallery/1.0 (Android booru client)"))
-            .addConverterFactory(GsonConverterFactory.create())
-            .build()
-            .create(Rule34Api::class.java)
     }
 }

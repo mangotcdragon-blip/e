@@ -1,6 +1,5 @@
 package com.dailytools.calculator.data.repo
 
-import com.dailytools.calculator.data.Rule34Credentials
 import com.dailytools.calculator.data.model.MediaKind
 import com.dailytools.calculator.data.model.MediaTypeFilter
 import com.dailytools.calculator.data.model.Post
@@ -8,21 +7,13 @@ import com.dailytools.calculator.data.model.Rating
 import com.dailytools.calculator.data.model.Source
 import com.dailytools.calculator.data.model.SortOrder
 import com.dailytools.calculator.data.network.NetworkModule
-import com.dailytools.calculator.data.network.Rule34Post
-import com.google.gson.Gson
 import com.google.gson.JsonElement
 import com.google.gson.JsonObject
-import com.google.gson.JsonParser
-import java.net.URLEncoder
 
 /** Posts per page, per the desired browsing density. */
 const val PAGE_SIZE = 200
 
-private val gson = Gson()
-
-class BooruRepository(
-    private val rule34Credentials: suspend () -> Rule34Credentials?,
-) {
+class BooruRepository {
 
     suspend fun fetchPage(
         source: Source,
@@ -34,7 +25,6 @@ class BooruRepository(
     ): List<Post> {
         val posts = when (source) {
             Source.E621 -> fetchE621(query, rating, sort, pageIndex)
-            Source.RULE34 -> fetchRule34(query, rating, pageIndex)
         }
         return if (mediaType == MediaTypeFilter.ALL) {
             posts
@@ -57,14 +47,6 @@ class BooruRepository(
                 Source.E621 -> NetworkModule.e621Api
                     .autocompleteTags(prefix = prefix, limit = 8)
                     .mapNotNull { it.name }
-
-                Source.RULE34 -> {
-                    val encoded = URLEncoder.encode(prefix, "UTF-8")
-                    NetworkModule.rule34Api
-                        .autocompleteTags("https://rule34.xxx/autocomplete.php?q=$encoded")
-                        .orEmpty()
-                        .mapNotNull { it.value ?: it.label }
-                }
             }
         }.getOrElse { emptyList() }
     }
@@ -92,38 +74,6 @@ class BooruRepository(
         }
         return array.mapNotNull { el ->
             el.takeIf { it.isJsonObject }?.let { runCatching { e621PostFrom(it.asJsonObject) }.getOrNull() }
-        }
-    }
-
-    private suspend fun fetchRule34(query: String, rating: Rating, pageIndex: Int): List<Post> {
-        val credentials = rule34Credentials()
-            ?: error("Rule34 now requires a free account API key - add your user ID and API key in Settings.")
-        // Rule34's dapi does not reliably support order:/sort: meta tags, so sort is e621-only.
-        val body = NetworkModule.rule34Api.posts(
-            page = "dapi",
-            s = "post",
-            q = "index",
-            json = 1,
-            tags = buildTags(query, rating, sort = null),
-            limit = PAGE_SIZE,
-            pid = pageIndex,
-            userId = credentials.userId,
-            apiKey = credentials.apiKey,
-        ).use { it.string() }
-        if (body.isBlank()) return emptyList()
-        val root = JsonParser.parseString(body)
-        if (!root.isJsonArray) {
-            val message = serverMessage(root) ?: "unexpected response"
-            error(
-                if (message.contains("auth", ignoreCase = true)) {
-                    "Rule34 rejected your API key - double-check the user ID and API key in Settings."
-                } else {
-                    "Rule34: $message"
-                },
-            )
-        }
-        return root.asJsonArray.mapNotNull { el ->
-            runCatching { gson.fromJson(el, Rule34Post::class.java).toPost() }.getOrNull()
         }
     }
 
@@ -201,29 +151,6 @@ class BooruRepository(
                 .orEmpty()
         }
         else -> emptyList()
-    }
-
-    private fun Rule34Post.toPost(): Post? {
-        val url = file_url ?: sample_url ?: return null
-        val preview = preview_url ?: sample_url ?: url
-        val mediaKind = Post.mediaKindFor(url)
-        // Rule34's dapi has no "is this actually a lighter encode" flag, so just prefer
-        // sample_url whenever it differs from the original file (pickViewUrl still guards
-        // against it being a still-frame JPEG for a video post).
-        val sampleCandidate = sample_url?.takeIf { it != url }
-        return Post(
-            id = "r34_$id",
-            source = Source.RULE34,
-            previewUrl = preview,
-            fileUrl = url,
-            viewUrl = pickViewUrl(url, mediaKind, sampleCandidate),
-            width = width ?: 0,
-            height = height ?: 0,
-            tags = tags.orEmpty().split(" ").filter { it.isNotBlank() },
-            ratingLabel = rating.orEmpty(),
-            score = score ?: 0,
-            mediaKind = mediaKind,
-        )
     }
 }
 

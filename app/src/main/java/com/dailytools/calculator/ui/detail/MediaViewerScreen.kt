@@ -153,7 +153,7 @@ fun MediaViewerScreen(
                 // one on screen, so its image/video starts fetching and buffering *while still
                 // viewing the current post* - by the time you swipe, it's often already there.
                 // This is the same look-ahead idea feeds like YouTube/TikTok rely on; it can't
-                // make e621/Rule34's own servers faster, but it hides most of that latency behind
+                // make e621's own servers faster, but it hides most of that latency behind
                 // however long you spend on the post before it.
                 beyondViewportPageCount = 1,
             ) { page ->

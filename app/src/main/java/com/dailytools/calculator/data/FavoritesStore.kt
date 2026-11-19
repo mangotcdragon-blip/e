@@ -25,6 +25,9 @@ class FavoritesStore(private val context: Context) {
         return runCatching { favoritesGson.fromJson<List<Post>>(json, likedPostsListType) }
             .getOrNull()
             .orEmpty()
+            // Rule34 support was removed; its saved likes deserialize with no source and would crash
+            // anything that reads post.source, so they're dropped (and pruned on the next save).
+            .filterNot { it.id.startsWith("r34_") }
     }
 
     /** Newest-liked-first. */

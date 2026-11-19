@@ -44,7 +44,6 @@ fun VlcVideoPlayerView(url: String, isActive: Boolean = true, modifier: Modifier
 
         val referer = when {
             url.contains("e621") -> "https://e621.net/"
-            url.contains("rule34") -> "https://rule34.xxx/"
             else -> null
         }
         val media = Media(libVlc, Uri.parse(url)).apply {

@@ -147,12 +147,6 @@ class BrowserViewModel(
         persistFiltersAndRefresh()
     }
 
-    fun setSource(source: Source) {
-        if (source == uiState.source) return
-        uiState = uiState.copy(source = source)
-        persistFiltersAndRefresh()
-    }
-
     fun setRating(rating: Rating) {
         uiState = uiState.copy(rating = rating)
         persistFiltersAndRefresh()
@@ -282,7 +276,7 @@ class BrowserViewModel(
                     pageIndex = requestedPage,
                 )
             }.onSuccess { newPosts ->
-                // e621/Rule34 pagination isn't perfectly stable across requests (ties in sort
+                // e621's pagination isn't perfectly stable across requests (ties in sort
                 // order shifting, off-by-one overlaps, etc.), so the same post can come back on
                 // more than one "page" - drop anything already on screen instead of showing it
                 // twice as you scroll.

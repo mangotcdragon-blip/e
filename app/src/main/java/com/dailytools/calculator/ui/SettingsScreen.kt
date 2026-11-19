@@ -56,9 +56,6 @@ fun SettingsScreen(
     val cacheTreeUri by settingsStore.externalCacheTreeUri.collectAsState(initial = null)
     val blacklistedTags by settingsStore.blacklistedTags.collectAsState(initial = emptySet())
     var blacklistInput by remember { mutableStateOf("") }
-    val savedRule34 by settingsStore.rule34Credentials.collectAsState(initial = null)
-    var rule34UserId by remember(savedRule34) { mutableStateOf(savedRule34?.userId.orEmpty()) }
-    var rule34ApiKey by remember(savedRule34) { mutableStateOf(savedRule34?.apiKey.orEmpty()) }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
 
@@ -210,50 +207,6 @@ fun SettingsScreen(
                             trailingIcon = { Icon(Icons.Filled.Close, contentDescription = "Remove") },
                         )
                     }
-                }
-            }
-
-            Text(
-                "Rule34 account",
-                style = MaterialTheme.typography.titleLarge,
-                modifier = Modifier.padding(top = 24.dp, start = 16.dp, end = 16.dp),
-            )
-            Text(
-                "Rule34 now requires an API key to browse. Make a free account on rule34.xxx, open " +
-                    "My Account > Options, generate API access credentials, and paste the user ID and " +
-                    "API key from there below.",
-                style = MaterialTheme.typography.bodyLarge,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-            )
-            OutlinedTextField(
-                value = rule34UserId,
-                onValueChange = { rule34UserId = it },
-                label = { Text("User ID") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-            )
-            OutlinedTextField(
-                value = rule34ApiKey,
-                onValueChange = { rule34ApiKey = it },
-                label = { Text("API key") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-            )
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                Button(onClick = {
-                    scope.launch { settingsStore.setRule34Credentials(rule34UserId, rule34ApiKey) }
-                }) {
-                    Text("Save")
-                }
-                if (savedRule34 != null) {
-                    Text(
-                        "Saved",
-                        style = MaterialTheme.typography.bodyLarge,
-                        modifier = Modifier.align(androidx.compose.ui.Alignment.CenterVertically),
-                    )
                 }
             }
         }

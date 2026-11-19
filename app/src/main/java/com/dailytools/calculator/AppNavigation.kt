@@ -23,7 +23,6 @@ import com.dailytools.calculator.ui.detail.LikedDetailScreen
 import com.dailytools.calculator.ui.detail.PostDetailScreen
 import com.dailytools.calculator.ui.theme.CalculatorTheme
 import com.dailytools.calculator.ui.theme.GalleryTheme
-import kotlinx.coroutines.flow.first
 
 private sealed class Screen {
     data object Calculator : Screen()
@@ -47,7 +46,7 @@ fun AppRoot(
 
     // Hoisted above the calculator/browser split so the browsing session (and its
     // in-flight restore-from-disk fetch) survives every re-lock, not just navigation.
-    val repository = remember { BooruRepository { settingsStore.rule34Credentials.first() } }
+    val repository = remember { BooruRepository() }
     val browserViewModel: BrowserViewModel = viewModel(
         factory = BrowserViewModel.factory(repository, settingsStore, favoritesStore),
     )

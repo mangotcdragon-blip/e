@@ -194,7 +194,6 @@ fun BrowserScreen(
         FilterSheet(
             state = state,
             onDismiss = { showFilters = false },
-            onSourceChange = viewModel::setSource,
             onRatingChange = viewModel::setRating,
             onMediaTypeChange = viewModel::setMediaType,
             onSortChange = viewModel::setSort,

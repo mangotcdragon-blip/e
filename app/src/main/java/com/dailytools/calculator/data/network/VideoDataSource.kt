@@ -34,7 +34,6 @@ object VideoDataSource {
     fun factoryFor(context: Context, url: String): DataSource.Factory {
         val referer = when {
             url.contains("e621") -> "https://e621.net/"
-            url.contains("rule34") -> "https://rule34.xxx/"
             else -> null
         }
         val httpFactory = OkHttpDataSource.Factory(sharedClient)

@@ -2,7 +2,6 @@ package com.dailytools.calculator.data.model
 
 enum class Source(val label: String) {
     E621("e621"),
-    RULE34("Rule34"),
 }
 
 enum class Rating(val label: String, val tag: String?) {
