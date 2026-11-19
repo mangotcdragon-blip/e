@@ -14,6 +14,11 @@ android {
         targetSdk = 35
         versionCode = (project.findProperty("appVersionCode") as String?)?.toIntOrNull() ?: 1
         versionName = "1.0"
+        // libvlc-all ships native libraries for four CPU architectures (~219 MB APK). arm64 is what
+        // effectively every phone from the last several years runs, so only that one is packaged.
+        ndk {
+            abiFilters += "arm64-v8a"
+        }
     }
 
     signingConfigs {
